@@ -73,6 +73,7 @@ class Film(Base):
     diary_entries = relationship("DiaryEntry", back_populates="film")
     watchlist_items = relationship("WatchlistItem", back_populates="film")
     user_films = relationship("UserFilm", back_populates="film")
+    tmdb_data = relationship("TmdbFilm", back_populates="film", uselist=False, cascade="all, delete-orphan")
 
 
 class DiaryEntry(Base):
@@ -157,10 +158,84 @@ class SyncLog(Base):
     __tablename__ = "sync_logs"
 
     id = Column(Integer, primary_key=True)
-    sync_type = Column(String(50), nullable=False)  # "full", "diary", "watchlist"
+    sync_type = Column(String(50), nullable=False)  # "full", "diary", "watchlist", "tmdb"
     username = Column(String(100), nullable=False)
     started_at = Column(DateTime, nullable=False)
     completed_at = Column(DateTime)
     status = Column(String(20), default="running")  # "running", "completed", "failed"
     items_processed = Column(Integer, default=0)
     error_message = Column(Text)
+
+
+class TmdbFilm(Base):
+    """TMDB enrichment data for films.
+
+    Separated from Film table to keep Letterboxd data distinct from TMDB data.
+    1:1 relationship with Film via film_id.
+    """
+    __tablename__ = "tmdb_films"
+
+    id = Column(Integer, primary_key=True)
+    film_id = Column(Integer, ForeignKey("films.id"), unique=True, nullable=False, index=True)
+    tmdb_id = Column(Integer, unique=True, index=True)
+
+    # === Financial ===
+    budget = Column(Integer)  # Production budget in USD
+    revenue = Column(Integer)  # Box office revenue in USD
+
+    # === Ratings ===
+    vote_average = Column(Float)  # TMDB rating out of 10
+    vote_count = Column(Integer)  # Number of TMDB votes
+    popularity = Column(Float)  # TMDB popularity score
+
+    # === Classification ===
+    certification = Column(String(20))  # US certification: "R", "PG-13", etc.
+    certifications_json = Column(JSON)  # All countries: {"US": "R", "GB": "15", ...}
+    adult = Column(Boolean, default=False)
+
+    # === Metadata ===
+    status = Column(String(50))  # "Released", "Post Production", "Planned", etc.
+    release_date = Column(String(20))  # Full date: "1999-10-15"
+    homepage = Column(String(500))  # Official website
+    origin_country_json = Column(JSON)  # Primary origin countries: ["US", "GB"]
+
+    # === Collection/Franchise ===
+    collection_id = Column(Integer)  # TMDB collection ID
+    collection_name = Column(String(300))  # "The Godfather Collection"
+    collection_poster_path = Column(String(300))  # Collection poster
+
+    # === Thematic ===
+    keywords_json = Column(JSON)  # [{"id": 123, "name": "time travel"}, ...]
+
+    # === Streaming/Watch Providers ===
+    watch_providers_json = Column(JSON)  # {"US": {"flatrate": [...], "rent": [...], "buy": [...]}}
+
+    # === Related Films ===
+    similar_json = Column(JSON)  # List of similar TMDB IDs
+    recommendations_json = Column(JSON)  # List of recommended TMDB IDs
+
+    # === External IDs ===
+    imdb_id = Column(String(20))  # IMDb ID (also in Film, but TMDB's version)
+    wikidata_id = Column(String(50))  # Wikidata ID
+    facebook_id = Column(String(100))  # Facebook page ID
+    instagram_id = Column(String(100))  # Instagram handle
+    twitter_id = Column(String(100))  # Twitter/X handle
+
+    # === Media ===
+    videos_json = Column(JSON)  # All trailers, teasers, featurettes
+
+    # === Credits (TMDB's detailed version) ===
+    cast_json = Column(JSON)  # Detailed cast with order, character, profile_path
+    crew_json = Column(JSON)  # Detailed crew with department, job
+
+    # === Production ===
+    production_companies_json = Column(JSON)  # Detailed production companies
+
+    # === Sync Tracking ===
+    last_synced_at = Column(DateTime)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationship
+    film = relationship("Film", back_populates="tmdb_data")

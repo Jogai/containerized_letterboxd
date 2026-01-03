@@ -11,4 +11,5 @@ services:
       - SYNC_SCHEDULE=${SYNC_SCHEDULE:-0 6 * * *}
       - SYNC_MIN_DELAY=${SYNC_MIN_DELAY:-4.0}
       - DATABASE_PATH=/app/data/letterboxd.db
+      - TMDB_API_KEY=${TMDB_API_KEY}
     restart: unless-stopped

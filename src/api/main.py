@@ -14,8 +14,9 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from src.db.database import get_db, init_db
-from src.db.models import User, Film, DiaryEntry, WatchlistItem, UserFilm, SyncLog
+from src.db.models import User, Film, DiaryEntry, WatchlistItem, UserFilm, SyncLog, TmdbFilm
 from src.scraper.sync import run_sync
+from src.scraper.tmdb_sync import TmdbSync, run_tmdb_sync
 
 app = FastAPI(
     title="Your Letterboxd",
@@ -47,6 +48,52 @@ def trigger_sync(
     """Trigger a sync for a user (runs in background)."""
     background_tasks.add_task(run_sync, username, fetch_details)
     return {"status": "started", "username": username}
+
+
+@app.post("/api/tmdb/sync")
+def trigger_tmdb_sync(
+    background_tasks: BackgroundTasks,
+    limit: Optional[int] = None,
+    force: bool = False
+):
+    """Trigger TMDB enrichment sync (runs in background).
+
+    Args:
+        limit: Max number of films to process (None = all)
+        force: Re-fetch even if already enriched
+    """
+    background_tasks.add_task(run_tmdb_sync, limit, force)
+    return {"status": "started", "limit": limit, "force": force}
+
+
+@app.get("/api/tmdb/status")
+def get_tmdb_status(db: Session = Depends(get_db)):
+    """Get TMDB enrichment status."""
+    try:
+        sync = TmdbSync()
+        return sync.get_enrichment_status(db)
+    except ValueError as e:
+        # API key not configured
+        return {
+            "error": str(e),
+            "total_films": db.query(Film).count(),
+            "films_with_tmdb_id": db.query(Film).filter(Film.tmdb_id.isnot(None)).count(),
+            "films_enriched": db.query(TmdbFilm).count(),
+        }
+
+
+@app.post("/api/tmdb/enrich/{film_id}")
+def enrich_single_film(
+    film_id: int,
+    force: bool = False,
+    db: Session = Depends(get_db)
+):
+    """Enrich a single film with TMDB data."""
+    try:
+        sync = TmdbSync()
+        return sync.enrich_single(db, film_id, force)
+    except ValueError as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/stats")
@@ -399,6 +446,191 @@ def get_insights(db: Session = Depends(get_db)):
     }
 
 
+@app.get("/api/insights/tmdb")
+def get_tmdb_insights(db: Session = Depends(get_db)):
+    """Get insights based on TMDB enrichment data."""
+    from sqlalchemy.orm import joinedload
+
+    # Get all watched films with TMDB data
+    user_films = db.query(UserFilm).filter(UserFilm.watched == True).all()
+    watched_film_ids = {uf.film_id for uf in user_films}
+
+    tmdb_films = db.query(TmdbFilm).filter(TmdbFilm.film_id.in_(watched_film_ids)).all()
+    films = {f.id: f for f in db.query(Film).filter(Film.id.in_(watched_film_ids)).all()}
+
+    # Build lookup
+    tmdb_by_film_id = {t.film_id: t for t in tmdb_films}
+
+    # === Financial Analysis ===
+    films_with_budget = []
+    films_with_revenue = []
+    total_budget_watched = 0
+    total_revenue_watched = 0
+
+    for tmdb in tmdb_films:
+        film = films.get(tmdb.film_id)
+        if not film:
+            continue
+
+        if tmdb.budget and tmdb.budget > 0:
+            films_with_budget.append({
+                "title": film.title,
+                "year": film.year,
+                "budget": tmdb.budget,
+                "poster_url": film.poster_url,
+            })
+            total_budget_watched += tmdb.budget
+
+        if tmdb.revenue and tmdb.revenue > 0:
+            films_with_revenue.append({
+                "title": film.title,
+                "year": film.year,
+                "revenue": tmdb.revenue,
+                "budget": tmdb.budget,
+                "roi": round((tmdb.revenue - (tmdb.budget or 0)) / tmdb.budget * 100, 1) if tmdb.budget else None,
+                "poster_url": film.poster_url,
+            })
+            total_revenue_watched += tmdb.revenue
+
+    avg_budget = round(total_budget_watched / len(films_with_budget)) if films_with_budget else 0
+    avg_revenue = round(total_revenue_watched / len(films_with_revenue)) if films_with_revenue else 0
+
+    # Top budget films
+    top_budget = sorted(films_with_budget, key=lambda x: x["budget"], reverse=True)[:10]
+    lowest_budget = sorted([f for f in films_with_budget if f["budget"] > 0], key=lambda x: x["budget"])[:10]
+
+    # Best ROI films
+    films_with_roi = [f for f in films_with_revenue if f["roi"] is not None]
+    best_roi = sorted(films_with_roi, key=lambda x: x["roi"], reverse=True)[:10]
+
+    # === Certification Breakdown ===
+    cert_counter = Counter()
+    for tmdb in tmdb_films:
+        if tmdb.certification:
+            cert_counter[tmdb.certification] += 1
+    certification_breakdown = [
+        {"certification": cert, "count": count}
+        for cert, count in cert_counter.most_common()
+    ]
+
+    # === Keywords/Themes Analysis ===
+    keyword_counter = Counter()
+    for tmdb in tmdb_films:
+        if tmdb.keywords_json:
+            for kw in tmdb.keywords_json:
+                name = kw.get("name") if isinstance(kw, dict) else str(kw)
+                if name:
+                    keyword_counter[name] += 1
+    top_keywords = [
+        {"keyword": kw, "count": count}
+        for kw, count in keyword_counter.most_common(30)
+    ]
+
+    # === TMDB vs Letterboxd Ratings ===
+    rating_comparison = []
+    for tmdb in tmdb_films:
+        film = films.get(tmdb.film_id)
+        if film and tmdb.vote_average and film.rating:
+            # Convert TMDB (0-10) to same scale as Letterboxd (0-5)
+            tmdb_scaled = tmdb.vote_average / 2
+            gap = film.rating - tmdb_scaled
+            rating_comparison.append({
+                "title": film.title,
+                "year": film.year,
+                "letterboxd_rating": round(film.rating, 2),
+                "tmdb_rating": round(tmdb.vote_average, 1),
+                "tmdb_rating_scaled": round(tmdb_scaled, 2),
+                "gap": round(gap, 2),
+                "poster_url": film.poster_url,
+            })
+
+    # Films rated higher on Letterboxd vs TMDB
+    letterboxd_favorites = sorted(
+        [f for f in rating_comparison if f["gap"] > 0.3],
+        key=lambda x: x["gap"],
+        reverse=True
+    )[:10]
+
+    # Films rated higher on TMDB vs Letterboxd
+    tmdb_favorites = sorted(
+        [f for f in rating_comparison if f["gap"] < -0.3],
+        key=lambda x: x["gap"]
+    )[:10]
+
+    # === Collection/Franchise Stats ===
+    collection_counter = Counter()
+    collection_films = {}
+    for tmdb in tmdb_films:
+        if tmdb.collection_name:
+            collection_counter[tmdb.collection_name] += 1
+            if tmdb.collection_name not in collection_films:
+                collection_films[tmdb.collection_name] = []
+            film = films.get(tmdb.film_id)
+            if film:
+                collection_films[tmdb.collection_name].append(film.title)
+
+    top_collections = [
+        {"collection": name, "count": count, "films": collection_films.get(name, [])}
+        for name, count in collection_counter.most_common(10)
+    ]
+
+    # === Streaming Availability (for watchlist) ===
+    watchlist_items = db.query(WatchlistItem).all()
+    watchlist_film_ids = {w.film_id for w in watchlist_items}
+    watchlist_tmdb = db.query(TmdbFilm).filter(TmdbFilm.film_id.in_(watchlist_film_ids)).all()
+
+    streaming_counter = Counter()
+    streaming_films = {}
+    for tmdb in watchlist_tmdb:
+        if tmdb.watch_providers_json:
+            us_providers = tmdb.watch_providers_json.get("US", {})
+            for provider in us_providers.get("flatrate", []):
+                name = provider.get("name")
+                if name:
+                    streaming_counter[name] += 1
+                    if name not in streaming_films:
+                        streaming_films[name] = []
+                    film = films.get(tmdb.film_id)
+                    if film:
+                        streaming_films[name].append({
+                            "title": film.title,
+                            "year": film.year,
+                            "poster_url": film.poster_url,
+                        })
+
+    watchlist_streaming = [
+        {"provider": name, "count": count, "films": streaming_films.get(name, [])[:5]}
+        for name, count in streaming_counter.most_common(10)
+    ]
+
+    return {
+        "enrichment_stats": {
+            "total_watched": len(user_films),
+            "films_enriched": len(tmdb_films),
+            "enrichment_percentage": round(len(tmdb_films) / len(user_films) * 100, 1) if user_films else 0,
+        },
+        "financial": {
+            "films_with_budget": len(films_with_budget),
+            "films_with_revenue": len(films_with_revenue),
+            "total_budget_watched": total_budget_watched,
+            "total_revenue_watched": total_revenue_watched,
+            "avg_budget": avg_budget,
+            "avg_revenue": avg_revenue,
+            "top_budget": top_budget,
+            "lowest_budget": lowest_budget,
+            "best_roi": best_roi,
+        },
+        "certification_breakdown": certification_breakdown,
+        "top_keywords": top_keywords,
+        "rating_comparison": {
+            "letterboxd_favorites": letterboxd_favorites,
+            "tmdb_favorites": tmdb_favorites,
+        },
+        "top_collections": top_collections,
+        "watchlist_streaming": watchlist_streaming,
+    }
+
+
 @app.get("/api/films")
 def get_films(
     sort: str = "title",
@@ -486,7 +718,10 @@ def get_film_detail(film_id: int, db: Session = Depends(get_db)):
     # Get diary entries for this film
     diary_entries = db.query(DiaryEntry).filter(DiaryEntry.film_id == film_id).order_by(DiaryEntry.watched_date.desc()).all()
 
-    return {
+    # Get TMDB enrichment data
+    tmdb_data = db.query(TmdbFilm).filter(TmdbFilm.film_id == film_id).first()
+
+    result = {
         "id": film.id,
         "slug": film.slug,
         "title": film.title,
@@ -525,6 +760,40 @@ def get_film_detail(film_id: int, db: Session = Depends(get_db)):
             for e in diary_entries
         ],
     }
+
+    # Add TMDB data if available
+    if tmdb_data:
+        result["tmdb"] = {
+            "budget": tmdb_data.budget,
+            "revenue": tmdb_data.revenue,
+            "vote_average": tmdb_data.vote_average,
+            "vote_count": tmdb_data.vote_count,
+            "popularity": tmdb_data.popularity,
+            "certification": tmdb_data.certification,
+            "status": tmdb_data.status,
+            "release_date": tmdb_data.release_date,
+            "homepage": tmdb_data.homepage,
+            "collection": {
+                "id": tmdb_data.collection_id,
+                "name": tmdb_data.collection_name,
+                "poster_path": tmdb_data.collection_poster_path,
+            } if tmdb_data.collection_id else None,
+            "keywords": [kw.get("name") for kw in (tmdb_data.keywords_json or [])],
+            "watch_providers": tmdb_data.watch_providers_json,
+            "videos": tmdb_data.videos_json,
+            "similar": tmdb_data.similar_json,
+            "recommendations": tmdb_data.recommendations_json,
+            "external_ids": {
+                "imdb": tmdb_data.imdb_id,
+                "wikidata": tmdb_data.wikidata_id,
+                "facebook": tmdb_data.facebook_id,
+                "instagram": tmdb_data.instagram_id,
+                "twitter": tmdb_data.twitter_id,
+            },
+            "last_synced": tmdb_data.last_synced_at.isoformat() if tmdb_data.last_synced_at else None,
+        }
+
+    return result
 
 
 @app.get("/api/diary")

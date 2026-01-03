@@ -99,16 +99,24 @@ class LetterboxdClient:
         user = User(username)
         films_data = user.get_films()
 
-        # films_data is a dict with film slugs as keys
+        # films_data structure: {movies: {slug: {name, id, rating, year, liked}}, count, liked_count}
         result = []
         if isinstance(films_data, dict):
-            for slug, data in films_data.items():
-                result.append({
-                    "slug": slug,
-                    "name": data.get("name"),
-                    "year": data.get("year"),
-                    "rating": data.get("rating"),  # User's rating
-                })
+            movies = films_data.get("movies", {})
+            if isinstance(movies, dict):
+                for slug, data in movies.items():
+                    if not isinstance(data, dict):
+                        continue
+                    # Rating is 0-10 in letterboxdpy, convert to 0.5-5 scale
+                    raw_rating = data.get("rating")
+                    rating = raw_rating / 2.0 if raw_rating else None
+                    result.append({
+                        "slug": slug,
+                        "name": data.get("name"),
+                        "year": data.get("year"),
+                        "rating": rating,
+                        "liked": data.get("liked", False),
+                    })
         return result
 
     def get_user_diary(self, username: str, year: Optional[int] = None) -> list[dict]:
@@ -202,6 +210,10 @@ class LetterboxdClient:
 
         movie = Movie(slug)
 
+        # Directors are in crew dict, not a direct attribute
+        crew = getattr(movie, "crew", {}) or {}
+        directors = crew.get("director", [])
+
         return {
             "slug": slug,
             "title": getattr(movie, "title", None),
@@ -212,7 +224,7 @@ class LetterboxdClient:
             "description": getattr(movie, "description", None),
             "poster": getattr(movie, "poster", None),
             "genres": getattr(movie, "genres", []),
-            "directors": getattr(movie, "directors", []),
+            "directors": directors,
             "cast": getattr(movie, "cast", []),
             "countries": getattr(movie, "countries", []),
             "languages": getattr(movie, "languages", []),

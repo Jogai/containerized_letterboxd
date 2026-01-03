@@ -1,0 +1,72 @@
+import { useState, useEffect } from 'react';
+import type { DashboardStats, Film, DiaryEntry } from '../types';
+
+const API_BASE = '/api';
+
+export function useDashboardStats() {
+  const [data, setData] = useState<DashboardStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/dashboard`)
+      .then(res => {
+        if (!res.ok) throw new Error('Failed to fetch');
+        return res.json();
+      })
+      .then(setData)
+      .catch(err => setError(err.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return { data, loading, error };
+}
+
+export function useCalendarData(year?: number) {
+  const [data, setData] = useState<{ date: string; count: number }[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const url = year ? `${API_BASE}/calendar?year=${year}` : `${API_BASE}/calendar`;
+    fetch(url)
+      .then(res => res.json())
+      .then(setData)
+      .finally(() => setLoading(false));
+  }, [year]);
+
+  return { data, loading };
+}
+
+export function useFilms(sort: string = 'title', order: string = 'asc') {
+  const [data, setData] = useState<Film[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/films?sort=${sort}&order=${order}`)
+      .then(res => res.json())
+      .then(setData)
+      .finally(() => setLoading(false));
+  }, [sort, order]);
+
+  return { data, loading };
+}
+
+export function useDiary(year?: number, month?: number) {
+  const [data, setData] = useState<DiaryEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let url = `${API_BASE}/diary`;
+    const params = new URLSearchParams();
+    if (year) params.append('year', year.toString());
+    if (month) params.append('month', month.toString());
+    if (params.toString()) url += `?${params.toString()}`;
+
+    fetch(url)
+      .then(res => res.json())
+      .then(setData)
+      .finally(() => setLoading(false));
+  }, [year, month]);
+
+  return { data, loading };
+}

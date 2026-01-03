@@ -2,15 +2,19 @@
 FastAPI app to serve Letterboxd data.
 """
 
-from datetime import datetime
+import os
+from datetime import datetime, timedelta
 from typing import Optional
+from collections import Counter
+from pathlib import Path
 
 from fastapi import FastAPI, Depends, BackgroundTasks, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from src.db.database import get_db, init_db
-from src.db.models import User, Film, DiaryEntry, WatchlistItem, SyncLog
+from src.db.models import User, Film, DiaryEntry, WatchlistItem, UserFilm, SyncLog
 from src.scraper.sync import run_sync
 
 app = FastAPI(
@@ -19,536 +23,15 @@ app = FastAPI(
     version="0.1.0",
 )
 
+# Serve static files (React build)
+STATIC_DIR = Path("/app/static")
+if STATIC_DIR.exists():
+    app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
+
 
 @app.on_event("startup")
 def startup():
     init_db()
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# HTML Views - List all data
-# ─────────────────────────────────────────────────────────────────────────────
-
-@app.get("/", response_class=HTMLResponse)
-def home(db: Session = Depends(get_db)):
-    """Home page with summary and links."""
-    user_count = db.query(User).count()
-    film_count = db.query(Film).count()
-    diary_count = db.query(DiaryEntry).count()
-    watchlist_count = db.query(WatchlistItem).count()
-
-    last_sync = db.query(SyncLog).order_by(SyncLog.started_at.desc()).first()
-    last_sync_str = last_sync.started_at.strftime("%Y-%m-%d %H:%M") if last_sync else "Never"
-
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Your Letterboxd</title>
-        <style>
-            body {{ font-family: -apple-system, system-ui, sans-serif; max-width: 900px; margin: 50px auto; padding: 20px; background: #14181c; color: #fff; }}
-            h1 {{ color: #00e054; }}
-            h2 {{ color: #99aabb; border-bottom: 1px solid #456; padding-bottom: 10px; }}
-            a {{ color: #40bcf4; text-decoration: none; }}
-            a:hover {{ text-decoration: underline; }}
-            .stats {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin: 30px 0; }}
-            .stat {{ background: #1c2228; padding: 20px; border-radius: 8px; text-align: center; }}
-            .stat-number {{ font-size: 2em; color: #00e054; font-weight: bold; }}
-            .stat-label {{ color: #99aabb; margin-top: 5px; }}
-            .nav {{ margin: 30px 0; }}
-            .nav a {{ background: #00e054; color: #14181c; padding: 10px 20px; border-radius: 5px; margin-right: 10px; font-weight: bold; }}
-            .nav a:hover {{ background: #00c04a; text-decoration: none; }}
-            .info {{ color: #678; margin-top: 30px; }}
-        </style>
-    </head>
-    <body>
-        <h1>Your Letterboxd</h1>
-        <p>Local backup of your Letterboxd data</p>
-
-        <div class="stats">
-            <div class="stat">
-                <div class="stat-number">{user_count}</div>
-                <div class="stat-label">Users</div>
-            </div>
-            <div class="stat">
-                <div class="stat-number">{film_count}</div>
-                <div class="stat-label">Films</div>
-            </div>
-            <div class="stat">
-                <div class="stat-number">{diary_count}</div>
-                <div class="stat-label">Diary Entries</div>
-            </div>
-            <div class="stat">
-                <div class="stat-number">{watchlist_count}</div>
-                <div class="stat-label">Watchlist</div>
-            </div>
-        </div>
-
-        <div class="nav">
-            <a href="/users">Users</a>
-            <a href="/films">Films</a>
-            <a href="/diary">Diary</a>
-            <a href="/watchlist">Watchlist</a>
-            <a href="/syncs">Sync History</a>
-        </div>
-
-        <p class="info">Last sync: {last_sync_str}</p>
-    </body>
-    </html>
-    """
-    return html
-
-
-@app.get("/users", response_class=HTMLResponse)
-def list_users(db: Session = Depends(get_db)):
-    """List all users."""
-    users = db.query(User).all()
-
-    rows = ""
-    for u in users:
-        stats = u.stats_json or {}
-        rows += f"""
-        <tr>
-            <td><a href="/users/{u.username}">{u.username}</a></td>
-            <td>{u.display_name or ''}</td>
-            <td>{stats.get('films', 0)}</td>
-            <td>{len(u.diary_entries)}</td>
-            <td>{len(u.watchlist_items)}</td>
-            <td>{u.updated_at.strftime('%Y-%m-%d %H:%M') if u.updated_at else ''}</td>
-        </tr>
-        """
-
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Users - Your Letterboxd</title>
-        <style>
-            body {{ font-family: -apple-system, system-ui, sans-serif; max-width: 1100px; margin: 50px auto; padding: 20px; background: #14181c; color: #fff; }}
-            h1 {{ color: #00e054; }}
-            a {{ color: #40bcf4; text-decoration: none; }}
-            table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-            th, td {{ text-align: left; padding: 12px; border-bottom: 1px solid #456; }}
-            th {{ background: #1c2228; color: #99aabb; }}
-            tr:hover {{ background: #1c2228; }}
-            .back {{ margin-bottom: 20px; }}
-        </style>
-    </head>
-    <body>
-        <div class="back"><a href="/">&larr; Back</a></div>
-        <h1>Users</h1>
-        <table>
-            <tr>
-                <th>Username</th>
-                <th>Display Name</th>
-                <th>Total Films</th>
-                <th>Diary Entries</th>
-                <th>Watchlist</th>
-                <th>Last Updated</th>
-            </tr>
-            {rows}
-        </table>
-    </body>
-    </html>
-    """
-    return html
-
-
-@app.get("/users/{username}", response_class=HTMLResponse)
-def get_user(username: str, db: Session = Depends(get_db)):
-    """Get user details."""
-    user = db.query(User).filter(User.username == username).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    stats = user.stats_json or {}
-    favorites = user.favorites_json or []
-
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>{user.username} - Your Letterboxd</title>
-        <style>
-            body {{ font-family: -apple-system, system-ui, sans-serif; max-width: 900px; margin: 50px auto; padding: 20px; background: #14181c; color: #fff; }}
-            h1 {{ color: #00e054; }}
-            h2 {{ color: #99aabb; }}
-            a {{ color: #40bcf4; text-decoration: none; }}
-            .meta {{ color: #678; margin: 10px 0; }}
-            .bio {{ background: #1c2228; padding: 15px; border-radius: 8px; margin: 20px 0; }}
-            .stats {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin: 20px 0; }}
-            .stat {{ background: #1c2228; padding: 15px; border-radius: 8px; text-align: center; }}
-            .back {{ margin-bottom: 20px; }}
-            pre {{ background: #1c2228; padding: 15px; border-radius: 8px; overflow-x: auto; }}
-        </style>
-    </head>
-    <body>
-        <div class="back"><a href="/users">&larr; Back to Users</a></div>
-        <h1>{user.display_name or user.username}</h1>
-        <p class="meta">@{user.username} {(' - ' + user.location) if user.location else ''}</p>
-
-        {f'<div class="bio">{user.bio}</div>' if user.bio else ''}
-
-        <div class="stats">
-            <div class="stat"><strong>{stats.get('films', 0)}</strong><br>Films</div>
-            <div class="stat"><strong>{stats.get('following', 0)}</strong><br>Following</div>
-            <div class="stat"><strong>{stats.get('followers', 0)}</strong><br>Followers</div>
-        </div>
-
-        <h2>Favorites</h2>
-        <p>{', '.join(favorites) if favorites else 'None'}</p>
-
-        <h2>Raw Data</h2>
-        <pre>{user.stats_json}</pre>
-    </body>
-    </html>
-    """
-    return html
-
-
-@app.get("/films", response_class=HTMLResponse)
-def list_films(
-    page: int = 1,
-    limit: int = 50,
-    db: Session = Depends(get_db)
-):
-    """List all films with pagination."""
-    offset = (page - 1) * limit
-    total = db.query(Film).count()
-    films = db.query(Film).order_by(Film.year.desc()).offset(offset).limit(limit).all()
-
-    rows = ""
-    for f in films:
-        directors = ", ".join([d.get("name", "") for d in (f.directors_json or [])[:2]])
-        genres = ", ".join([g.get("name", "") if isinstance(g, dict) else str(g) for g in (f.genres_json or [])[:3]])
-        rows += f"""
-        <tr>
-            <td><a href="/films/{f.slug}">{f.title}</a></td>
-            <td>{f.year or ''}</td>
-            <td>{directors}</td>
-            <td>{genres}</td>
-            <td>{f.rating or ''}</td>
-            <td>{f.runtime_minutes or ''} min</td>
-        </tr>
-        """
-
-    total_pages = (total + limit - 1) // limit
-    prev_link = f'<a href="/films?page={page-1}">&larr; Prev</a>' if page > 1 else ''
-    next_link = f'<a href="/films?page={page+1}">Next &rarr;</a>' if page < total_pages else ''
-
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Films - Your Letterboxd</title>
-        <style>
-            body {{ font-family: -apple-system, system-ui, sans-serif; max-width: 1100px; margin: 50px auto; padding: 20px; background: #14181c; color: #fff; }}
-            h1 {{ color: #00e054; }}
-            a {{ color: #40bcf4; text-decoration: none; }}
-            table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-            th, td {{ text-align: left; padding: 12px; border-bottom: 1px solid #456; }}
-            th {{ background: #1c2228; color: #99aabb; }}
-            tr:hover {{ background: #1c2228; }}
-            .back {{ margin-bottom: 20px; }}
-            .pagination {{ margin-top: 20px; display: flex; justify-content: space-between; }}
-            .info {{ color: #678; }}
-        </style>
-    </head>
-    <body>
-        <div class="back"><a href="/">&larr; Back</a></div>
-        <h1>Films ({total} total)</h1>
-        <table>
-            <tr>
-                <th>Title</th>
-                <th>Year</th>
-                <th>Director(s)</th>
-                <th>Genres</th>
-                <th>Rating</th>
-                <th>Runtime</th>
-            </tr>
-            {rows}
-        </table>
-        <div class="pagination">
-            <span>{prev_link}</span>
-            <span class="info">Page {page} of {total_pages}</span>
-            <span>{next_link}</span>
-        </div>
-    </body>
-    </html>
-    """
-    return html
-
-
-@app.get("/films/{slug}", response_class=HTMLResponse)
-def get_film(slug: str, db: Session = Depends(get_db)):
-    """Get film details."""
-    film = db.query(Film).filter(Film.slug == slug).first()
-    if not film:
-        raise HTTPException(status_code=404, detail="Film not found")
-
-    directors = ", ".join([d.get("name", "") for d in (film.directors_json or [])])
-    cast = ", ".join([c.get("name", "") for c in (film.cast_json or [])[:10]])
-    genres = ", ".join([g.get("name", "") if isinstance(g, dict) else str(g) for g in (film.genres_json or [])])
-    countries = ", ".join([c.get("name", "") if isinstance(c, dict) else str(c) for c in (film.countries_json or [])])
-
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>{film.title} - Your Letterboxd</title>
-        <style>
-            body {{ font-family: -apple-system, system-ui, sans-serif; max-width: 900px; margin: 50px auto; padding: 20px; background: #14181c; color: #fff; }}
-            h1 {{ color: #00e054; }}
-            h2 {{ color: #99aabb; margin-top: 30px; }}
-            a {{ color: #40bcf4; text-decoration: none; }}
-            .meta {{ color: #678; margin: 10px 0; }}
-            .poster {{ max-width: 200px; border-radius: 8px; margin: 20px 0; }}
-            .description {{ background: #1c2228; padding: 15px; border-radius: 8px; margin: 20px 0; line-height: 1.6; }}
-            .details {{ display: grid; grid-template-columns: 150px 1fr; gap: 10px; margin: 20px 0; }}
-            .details dt {{ color: #99aabb; }}
-            .back {{ margin-bottom: 20px; }}
-        </style>
-    </head>
-    <body>
-        <div class="back"><a href="/films">&larr; Back to Films</a></div>
-
-        {f'<img src="{film.poster_url}" class="poster" />' if film.poster_url else ''}
-
-        <h1>{film.title} <span style="color:#678">({film.year})</span></h1>
-        {f'<p class="meta"><em>{film.tagline}</em></p>' if film.tagline else ''}
-
-        <dl class="details">
-            <dt>Director(s)</dt><dd>{directors or 'Unknown'}</dd>
-            <dt>Genres</dt><dd>{genres or 'Unknown'}</dd>
-            <dt>Runtime</dt><dd>{film.runtime_minutes or '?'} minutes</dd>
-            <dt>Rating</dt><dd>{film.rating or 'N/A'} / 5</dd>
-            <dt>Countries</dt><dd>{countries or 'Unknown'}</dd>
-        </dl>
-
-        {f'<div class="description">{film.description}</div>' if film.description else ''}
-
-        <h2>Cast</h2>
-        <p>{cast or 'Unknown'}</p>
-
-        <h2>External Links</h2>
-        <p>
-            {f'<a href="{film.letterboxd_url}" target="_blank">Letterboxd</a>' if film.letterboxd_url else ''}
-            {f' | <a href="https://www.imdb.com/title/{film.imdb_id}" target="_blank">IMDb</a>' if film.imdb_id else ''}
-            {f' | <a href="https://www.themoviedb.org/movie/{film.tmdb_id}" target="_blank">TMDB</a>' if film.tmdb_id else ''}
-        </p>
-    </body>
-    </html>
-    """
-    return html
-
-
-@app.get("/diary", response_class=HTMLResponse)
-def list_diary(
-    page: int = 1,
-    limit: int = 50,
-    db: Session = Depends(get_db)
-):
-    """List all diary entries."""
-    offset = (page - 1) * limit
-    total = db.query(DiaryEntry).count()
-    entries = (
-        db.query(DiaryEntry)
-        .order_by(DiaryEntry.watched_date.desc())
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
-
-    rows = ""
-    for e in entries:
-        rating_stars = "★" * int(e.rating) + "½" * (1 if e.rating and e.rating % 1 else 0) if e.rating else ""
-        rows += f"""
-        <tr>
-            <td>{e.watched_date.strftime('%Y-%m-%d') if e.watched_date else ''}</td>
-            <td><a href="/films/{e.film.slug}">{e.film.title}</a></td>
-            <td>{e.film.year or ''}</td>
-            <td style="color:#00e054">{rating_stars}</td>
-            <td>{'♥' if e.liked else ''}</td>
-            <td>{'↻' if e.rewatch else ''}</td>
-            <td>{'📝' if e.review_text else ''}</td>
-        </tr>
-        """
-
-    total_pages = (total + limit - 1) // limit
-    prev_link = f'<a href="/diary?page={page-1}">&larr; Prev</a>' if page > 1 else ''
-    next_link = f'<a href="/diary?page={page+1}">Next &rarr;</a>' if page < total_pages else ''
-
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Diary - Your Letterboxd</title>
-        <style>
-            body {{ font-family: -apple-system, system-ui, sans-serif; max-width: 1100px; margin: 50px auto; padding: 20px; background: #14181c; color: #fff; }}
-            h1 {{ color: #00e054; }}
-            a {{ color: #40bcf4; text-decoration: none; }}
-            table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-            th, td {{ text-align: left; padding: 12px; border-bottom: 1px solid #456; }}
-            th {{ background: #1c2228; color: #99aabb; }}
-            tr:hover {{ background: #1c2228; }}
-            .back {{ margin-bottom: 20px; }}
-            .pagination {{ margin-top: 20px; display: flex; justify-content: space-between; }}
-            .info {{ color: #678; }}
-        </style>
-    </head>
-    <body>
-        <div class="back"><a href="/">&larr; Back</a></div>
-        <h1>Diary ({total} entries)</h1>
-        <table>
-            <tr>
-                <th>Date</th>
-                <th>Film</th>
-                <th>Year</th>
-                <th>Rating</th>
-                <th>Liked</th>
-                <th>Rewatch</th>
-                <th>Review</th>
-            </tr>
-            {rows}
-        </table>
-        <div class="pagination">
-            <span>{prev_link}</span>
-            <span class="info">Page {page} of {total_pages}</span>
-            <span>{next_link}</span>
-        </div>
-    </body>
-    </html>
-    """
-    return html
-
-
-@app.get("/watchlist", response_class=HTMLResponse)
-def list_watchlist(
-    page: int = 1,
-    limit: int = 50,
-    db: Session = Depends(get_db)
-):
-    """List watchlist items."""
-    offset = (page - 1) * limit
-    total = db.query(WatchlistItem).count()
-    items = (
-        db.query(WatchlistItem)
-        .order_by(WatchlistItem.created_at.desc())
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
-
-    rows = ""
-    for w in items:
-        directors = ", ".join([d.get("name", "") for d in (w.film.directors_json or [])[:2]])
-        rows += f"""
-        <tr>
-            <td><a href="/films/{w.film.slug}">{w.film.title}</a></td>
-            <td>{w.film.year or ''}</td>
-            <td>{directors}</td>
-            <td>{w.film.runtime_minutes or ''} min</td>
-        </tr>
-        """
-
-    total_pages = (total + limit - 1) // limit if total else 1
-    prev_link = f'<a href="/watchlist?page={page-1}">&larr; Prev</a>' if page > 1 else ''
-    next_link = f'<a href="/watchlist?page={page+1}">Next &rarr;</a>' if page < total_pages else ''
-
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Watchlist - Your Letterboxd</title>
-        <style>
-            body {{ font-family: -apple-system, system-ui, sans-serif; max-width: 1100px; margin: 50px auto; padding: 20px; background: #14181c; color: #fff; }}
-            h1 {{ color: #00e054; }}
-            a {{ color: #40bcf4; text-decoration: none; }}
-            table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-            th, td {{ text-align: left; padding: 12px; border-bottom: 1px solid #456; }}
-            th {{ background: #1c2228; color: #99aabb; }}
-            tr:hover {{ background: #1c2228; }}
-            .back {{ margin-bottom: 20px; }}
-            .pagination {{ margin-top: 20px; display: flex; justify-content: space-between; }}
-            .info {{ color: #678; }}
-        </style>
-    </head>
-    <body>
-        <div class="back"><a href="/">&larr; Back</a></div>
-        <h1>Watchlist ({total} films)</h1>
-        <table>
-            <tr>
-                <th>Film</th>
-                <th>Year</th>
-                <th>Director(s)</th>
-                <th>Runtime</th>
-            </tr>
-            {rows}
-        </table>
-        <div class="pagination">
-            <span>{prev_link}</span>
-            <span class="info">Page {page} of {total_pages}</span>
-            <span>{next_link}</span>
-        </div>
-    </body>
-    </html>
-    """
-    return html
-
-
-@app.get("/syncs", response_class=HTMLResponse)
-def list_syncs(db: Session = Depends(get_db)):
-    """List sync history."""
-    syncs = db.query(SyncLog).order_by(SyncLog.started_at.desc()).limit(50).all()
-
-    rows = ""
-    for s in syncs:
-        status_color = {"completed": "#00e054", "failed": "#ff4444", "running": "#ffaa00"}.get(s.status, "#fff")
-        rows += f"""
-        <tr>
-            <td>{s.started_at.strftime('%Y-%m-%d %H:%M')}</td>
-            <td>{s.username}</td>
-            <td>{s.sync_type}</td>
-            <td style="color:{status_color}">{s.status}</td>
-            <td>{s.items_processed or 0}</td>
-            <td>{s.error_message or ''}</td>
-        </tr>
-        """
-
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Sync History - Your Letterboxd</title>
-        <style>
-            body {{ font-family: -apple-system, system-ui, sans-serif; max-width: 1100px; margin: 50px auto; padding: 20px; background: #14181c; color: #fff; }}
-            h1 {{ color: #00e054; }}
-            a {{ color: #40bcf4; text-decoration: none; }}
-            table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-            th, td {{ text-align: left; padding: 12px; border-bottom: 1px solid #456; }}
-            th {{ background: #1c2228; color: #99aabb; }}
-            tr:hover {{ background: #1c2228; }}
-            .back {{ margin-bottom: 20px; }}
-        </style>
-    </head>
-    <body>
-        <div class="back"><a href="/">&larr; Back</a></div>
-        <h1>Sync History</h1>
-        <table>
-            <tr>
-                <th>Started</th>
-                <th>Username</th>
-                <th>Type</th>
-                <th>Status</th>
-                <th>Items</th>
-                <th>Error</th>
-            </tr>
-            {rows}
-        </table>
-    </body>
-    </html>
-    """
-    return html
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -575,3 +58,301 @@ def get_stats(db: Session = Depends(get_db)):
         "diary_entries": db.query(DiaryEntry).count(),
         "watchlist_items": db.query(WatchlistItem).count(),
     }
+
+
+@app.get("/api/dashboard")
+def get_dashboard(db: Session = Depends(get_db)):
+    """Get comprehensive dashboard statistics."""
+    now = datetime.utcnow()
+    year_start = datetime(now.year, 1, 1)
+    month_start = datetime(now.year, now.month, 1)
+
+    entries = db.query(DiaryEntry).all()
+    films = db.query(Film).all()
+    user_films = db.query(UserFilm).filter(UserFilm.watched == True).all()
+
+    # Datamaxx stats: total watched vs logged
+    total_watched = len(user_films)
+    total_logged = sum(1 for uf in user_films if (uf.watch_count or 0) > 0)
+    total_unlogged = total_watched - total_logged
+
+    total_films = len(entries)  # Keep for backward compat (diary entries count)
+    total_runtime = sum(f.runtime_minutes or 0 for f in films if f.id in {e.film_id for e in entries})
+    total_hours = round(total_runtime / 60, 1)
+
+    user_ratings = [e.rating for e in entries if e.rating]
+    avg_rating = round(sum(user_ratings) / len(user_ratings), 2) if user_ratings else 0
+
+    lb_ratings = [f.rating for f in films if f.rating and f.id in {e.film_id for e in entries}]
+    letterboxd_avg = round(sum(lb_ratings) / len(lb_ratings), 2) if lb_ratings else 0
+
+    films_this_year = sum(1 for e in entries if e.watched_date and e.watched_date >= year_start)
+    films_this_month = sum(1 for e in entries if e.watched_date and e.watched_date >= month_start)
+
+    # Top genres
+    genre_counter = Counter()
+    for e in entries:
+        film = next((f for f in films if f.id == e.film_id), None)
+        if film and film.genres_json:
+            for g in film.genres_json:
+                name = g.get("name") if isinstance(g, dict) else str(g)
+                if name and g.get("type", "genre") == "genre":
+                    genre_counter[name] += 1
+    top_genres = [{"name": name, "count": count} for name, count in genre_counter.most_common(10)]
+
+    # Top directors
+    director_counter = Counter()
+    for e in entries:
+        film = next((f for f in films if f.id == e.film_id), None)
+        if film and film.directors_json:
+            for d in film.directors_json:
+                name = d.get("name") if isinstance(d, dict) else str(d)
+                if name:
+                    director_counter[name] += 1
+    top_directors = [{"name": name, "count": count} for name, count in director_counter.most_common(10)]
+
+    # Top decades
+    decade_counter = Counter()
+    for e in entries:
+        film = next((f for f in films if f.id == e.film_id), None)
+        if film and film.year:
+            decade = f"{(film.year // 10) * 10}s"
+            decade_counter[decade] += 1
+    top_decades = [{"decade": decade, "count": count} for decade, count in decade_counter.most_common(10)]
+
+    # Rating distribution
+    rating_dist = Counter()
+    for r in user_ratings:
+        rating_dist[r] += 1
+    rating_distribution = [
+        {"rating": r, "count": rating_dist.get(r, 0)}
+        for r in [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5]
+    ]
+
+    # Films by month (last 12 months)
+    films_by_month = []
+    for i in range(11, -1, -1):
+        month_date = now - timedelta(days=i * 30)
+        month_key = month_date.strftime("%b %Y")
+        count = sum(
+            1 for e in entries
+            if e.watched_date and
+            e.watched_date.year == month_date.year and
+            e.watched_date.month == month_date.month
+        )
+        films_by_month.append({"month": month_key, "count": count})
+
+    # Films by year
+    year_counter = Counter()
+    for e in entries:
+        if e.watched_date:
+            year_counter[e.watched_date.year] += 1
+    films_by_year = [
+        {"year": year, "count": count}
+        for year, count in sorted(year_counter.items())
+    ]
+
+    # Recent films
+    recent_entries = sorted(
+        [e for e in entries if e.watched_date],
+        key=lambda e: e.watched_date,
+        reverse=True
+    )[:12]
+    recent_films = []
+    for e in recent_entries:
+        film = next((f for f in films if f.id == e.film_id), None)
+        if film:
+            recent_films.append({
+                "title": film.title,
+                "year": film.year,
+                "rating": e.rating,
+                "watched_date": e.watched_date.isoformat() if e.watched_date else None,
+                "poster_url": film.poster_url,
+            })
+
+    return {
+        "total_films": total_films,
+        "total_hours": total_hours,
+        "avg_rating": avg_rating,
+        "letterboxd_avg": letterboxd_avg,
+        "films_this_year": films_this_year,
+        "films_this_month": films_this_month,
+        "top_genres": top_genres,
+        "top_directors": top_directors,
+        "top_decades": top_decades,
+        "rating_distribution": rating_distribution,
+        "films_by_month": films_by_month,
+        "films_by_year": films_by_year,
+        "recent_films": recent_films,
+        # Datamaxx stats
+        "total_watched": total_watched,
+        "total_logged": total_logged,
+        "total_unlogged": total_unlogged,
+    }
+
+
+@app.get("/api/films")
+def get_films(
+    sort: str = "title",
+    order: str = "asc",
+    genre: Optional[str] = None,
+    decade: Optional[str] = None,
+    logged_only: bool = False,
+    db: Session = Depends(get_db)
+):
+    """Get all watched films with filtering and sorting.
+
+    Args:
+        sort: Sort by 'title', 'year', or 'rating'
+        order: 'asc' or 'desc'
+        genre: Filter by genre name
+        decade: Filter by decade (e.g., '1990s')
+        logged_only: If True, only return films with diary entries
+    """
+    # Use UserFilm for the complete watched list (datamaxx approach)
+    user_films = db.query(UserFilm).filter(UserFilm.watched == True).all()
+    films = {f.id: f for f in db.query(Film).all()}
+
+    result = []
+    for uf in user_films:
+        film = films.get(uf.film_id)
+        if not film:
+            continue
+
+        # Filter: logged only
+        if logged_only and uf.watch_count == 0:
+            continue
+
+        # Filter by genre
+        if genre:
+            genres = [g.get("name") for g in (film.genres_json or []) if isinstance(g, dict)]
+            if genre not in genres:
+                continue
+
+        # Filter by decade
+        if decade and film.year:
+            film_decade = f"{(film.year // 10) * 10}s"
+            if film_decade != decade:
+                continue
+
+        result.append({
+            "id": film.id,
+            "title": film.title,
+            "year": film.year,
+            "poster_url": film.poster_url,
+            "rating": uf.rating,
+            "letterboxd_rating": film.rating,
+            "runtime_minutes": film.runtime_minutes,
+            "genres": [g.get("name") for g in (film.genres_json or []) if isinstance(g, dict) and g.get("type") == "genre"],
+            "directors": [d.get("name") for d in (film.directors_json or []) if isinstance(d, dict)],
+            # Datamaxx extras
+            "watch_count": uf.watch_count or 0,
+            "liked": uf.liked,
+            "first_watched": uf.first_watched.isoformat() if uf.first_watched else None,
+            "last_watched": uf.last_watched.isoformat() if uf.last_watched else None,
+            "in_diary": (uf.watch_count or 0) > 0,
+        })
+
+    # Sort
+    reverse = order == "desc"
+    if sort == "title":
+        result.sort(key=lambda x: x["title"] or "", reverse=reverse)
+    elif sort == "year":
+        result.sort(key=lambda x: x["year"] or 0, reverse=reverse)
+    elif sort == "rating":
+        result.sort(key=lambda x: x["rating"] or 0, reverse=reverse)
+
+    return result
+
+
+@app.get("/api/diary")
+def get_diary(
+    year: Optional[int] = None,
+    month: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    """Get diary entries with optional year/month filter."""
+    query = db.query(DiaryEntry)
+
+    if year:
+        query = query.filter(
+            DiaryEntry.watched_date >= datetime(year, 1, 1),
+            DiaryEntry.watched_date < datetime(year + 1, 1, 1)
+        )
+    if month and year:
+        next_month = month + 1 if month < 12 else 1
+        next_year = year if month < 12 else year + 1
+        query = query.filter(
+            DiaryEntry.watched_date >= datetime(year, month, 1),
+            DiaryEntry.watched_date < datetime(next_year, next_month, 1)
+        )
+
+    entries = query.order_by(DiaryEntry.watched_date.desc()).all()
+    films = {f.id: f for f in db.query(Film).all()}
+
+    result = []
+    for e in entries:
+        film = films.get(e.film_id)
+        if film:
+            result.append({
+                "id": e.id,
+                "watched_date": e.watched_date.isoformat() if e.watched_date else None,
+                "rating": e.rating,
+                "liked": e.liked,
+                "rewatch": e.rewatch,
+                "review_text": e.review_text,
+                "film": {
+                    "id": film.id,
+                    "title": film.title,
+                    "year": film.year,
+                    "poster_url": film.poster_url,
+                }
+            })
+
+    return result
+
+
+@app.get("/api/calendar")
+def get_calendar(year: Optional[int] = None, db: Session = Depends(get_db)):
+    """Get calendar heatmap data for the last 365 days."""
+    now = datetime.utcnow()
+    start_date = now - timedelta(days=365)
+
+    entries = db.query(DiaryEntry).filter(
+        DiaryEntry.watched_date >= start_date
+    ).all()
+
+    day_counter = Counter()
+    for e in entries:
+        if e.watched_date:
+            day_key = e.watched_date.strftime("%Y-%m-%d")
+            day_counter[day_key] += 1
+
+    result = []
+    current = start_date
+    while current <= now:
+        day_key = current.strftime("%Y-%m-%d")
+        result.append({
+            "date": day_key,
+            "count": day_counter.get(day_key, 0)
+        })
+        current += timedelta(days=1)
+
+    return result
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Serve React SPA
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.get("/{full_path:path}")
+async def serve_spa(full_path: str):
+    """Serve the React SPA for all routes."""
+    if full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="Not found")
+
+    index_path = STATIC_DIR / "index.html"
+    if index_path.exists():
+        return FileResponse(index_path)
+
+    return HTMLResponse(content="<h1>Frontend not built</h1>", status_code=200)

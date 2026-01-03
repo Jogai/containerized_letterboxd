@@ -23,6 +23,7 @@ class User(Base):
     # Relationships
     diary_entries = relationship("DiaryEntry", back_populates="user", cascade="all, delete-orphan")
     watchlist_items = relationship("WatchlistItem", back_populates="user", cascade="all, delete-orphan")
+    user_films = relationship("UserFilm", back_populates="user", cascade="all, delete-orphan")
 
 
 class Film(Base):
@@ -63,6 +64,7 @@ class Film(Base):
     # Relationships
     diary_entries = relationship("DiaryEntry", back_populates="film")
     watchlist_items = relationship("WatchlistItem", back_populates="film")
+    user_films = relationship("UserFilm", back_populates="film")
 
 
 class DiaryEntry(Base):
@@ -92,6 +94,36 @@ class DiaryEntry(Base):
     # Relationships
     user = relationship("User", back_populates="diary_entries")
     film = relationship("Film", back_populates="diary_entries")
+
+
+class UserFilm(Base):
+    """User's relationship with a film (watched status, rating, etc.)
+
+    This captures ALL watched films, including those without diary entries.
+    Datamaxx philosophy: capture everything.
+    """
+    __tablename__ = "user_films"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    film_id = Column(Integer, ForeignKey("films.id"), nullable=False, index=True)
+
+    # Core status
+    watched = Column(Boolean, default=False)  # In user's watched list
+    rating = Column(Float)  # User's rating (may exist without diary entry!)
+    liked = Column(Boolean, default=False)  # Aggregated from diary or standalone
+
+    # Derived from diary entries
+    watch_count = Column(Integer, default=0)  # Number of diary entries
+    first_watched = Column(DateTime)  # Earliest diary entry date
+    last_watched = Column(DateTime)  # Most recent diary entry date
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User", back_populates="user_films")
+    film = relationship("Film", back_populates="user_films")
 
 
 class WatchlistItem(Base):

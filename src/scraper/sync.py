@@ -9,7 +9,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from src.db.database import SessionLocal, init_db
-from src.db.models import User, Film, DiaryEntry, WatchlistItem, SyncLog
+from src.db.models import User, Film, DiaryEntry, WatchlistItem, UserFilm, SyncLog
 from src.scraper.client import LetterboxdClient
 
 logger = logging.getLogger(__name__)
@@ -51,6 +51,7 @@ class LetterboxdSync:
 
         stats = {
             "user_synced": False,
+            "watched_films": 0,
             "diary_entries": 0,
             "watchlist_items": 0,
             "films_synced": 0,
@@ -63,7 +64,12 @@ class LetterboxdSync:
             user = self._sync_user(db)
             stats["user_synced"] = True
 
-            # Sync diary (watched films)
+            # Sync ALL watched films (datamaxx: captures films without diary entries)
+            logger.info(f"Syncing watched films for: {self.username}")
+            watched_count = self._sync_watched_films(db, user, fetch_film_details)
+            stats["watched_films"] = watched_count
+
+            # Sync diary (dated watch logs)
             logger.info(f"Syncing diary for: {self.username}")
             diary_count = self._sync_diary(db, user, fetch_film_details)
             stats["diary_entries"] = diary_count
@@ -109,10 +115,58 @@ class LetterboxdSync:
         db.commit()
         return user
 
+    def _sync_watched_films(self, db: Session, user: User, fetch_details: bool) -> int:
+        """Sync ALL watched films (including those without diary entries).
+
+        This is the datamaxx approach - captures every film the user has marked
+        as watched, even if they never logged a specific watch date.
+        """
+        watched_films = self.client.get_user_films(self.username)
+        count = 0
+
+        for film_data in watched_films:
+            film_slug = film_data.get("slug")
+            if not film_slug:
+                continue
+
+            # Get or create film
+            film = self._get_or_create_film(db, film_slug, fetch_details)
+            if not film:
+                continue
+
+            # Get or create UserFilm
+            user_film = db.query(UserFilm).filter(
+                UserFilm.user_id == user.id,
+                UserFilm.film_id == film.id
+            ).first()
+
+            if not user_film:
+                user_film = UserFilm(
+                    user_id=user.id,
+                    film_id=film.id,
+                    watched=True,
+                )
+                db.add(user_film)
+                count += 1
+
+            # Update with data from watched films list
+            user_film.watched = True
+            # Rating from watched films list (may differ from diary entry ratings)
+            if film_data.get("rating"):
+                user_film.rating = film_data["rating"]
+            # Liked status from watched films list
+            if film_data.get("liked"):
+                user_film.liked = True
+            user_film.updated_at = datetime.utcnow()
+
+        db.commit()
+        return count
+
     def _sync_diary(self, db: Session, user: User, fetch_details: bool) -> int:
-        """Sync user's diary entries."""
+        """Sync user's diary entries and update UserFilm aggregates."""
         diary_entries = self.client.get_user_diary(self.username)
         count = 0
+        films_to_update = set()
 
         for entry_data in diary_entries:
             entry_id = entry_data.get("id")
@@ -125,6 +179,8 @@ class LetterboxdSync:
             film = self._get_or_create_film(db, film_slug, fetch_details)
             if not film:
                 continue
+
+            films_to_update.add(film.id)
 
             # Check if entry already exists
             existing = db.query(DiaryEntry).filter(
@@ -161,7 +217,59 @@ class LetterboxdSync:
                 count += 1
 
         db.commit()
+
+        # Update UserFilm aggregates from diary entries
+        self._update_user_film_aggregates(db, user, films_to_update)
+
         return count
+
+    def _update_user_film_aggregates(
+        self, db: Session, user: User, film_ids: set
+    ) -> None:
+        """Update UserFilm records with aggregated diary data."""
+        for film_id in film_ids:
+            # Get all diary entries for this user+film
+            entries = db.query(DiaryEntry).filter(
+                DiaryEntry.user_id == user.id,
+                DiaryEntry.film_id == film_id
+            ).all()
+
+            if not entries:
+                continue
+
+            # Get or create UserFilm
+            user_film = db.query(UserFilm).filter(
+                UserFilm.user_id == user.id,
+                UserFilm.film_id == film_id
+            ).first()
+
+            if not user_film:
+                user_film = UserFilm(
+                    user_id=user.id,
+                    film_id=film_id,
+                    watched=True,
+                )
+                db.add(user_film)
+
+            # Compute aggregates
+            user_film.watch_count = len(entries)
+            user_film.liked = any(e.liked for e in entries)
+
+            # Get dates (filter out None)
+            dates = [e.watched_date for e in entries if e.watched_date]
+            if dates:
+                user_film.first_watched = min(dates)
+                user_film.last_watched = max(dates)
+
+            # Use most recent rating if available
+            rated_entries = [e for e in entries if e.rating]
+            if rated_entries:
+                latest_rated = max(rated_entries, key=lambda e: e.watched_date or datetime.min)
+                user_film.rating = latest_rated.rating
+
+            user_film.updated_at = datetime.utcnow()
+
+        db.commit()
 
     def _sync_watchlist(self, db: Session, user: User, fetch_details: bool) -> int:
         """Sync user's watchlist."""
@@ -276,6 +384,7 @@ if __name__ == "__main__":
 
     stats = run_sync(username)
     print(f"\nSync completed:")
+    print(f"  Watched films: {stats['watched_films']}")
     print(f"  Diary entries: {stats['diary_entries']}")
     print(f"  Watchlist items: {stats['watchlist_items']}")
     print(f"  Films in database: {stats['films_synced']}")

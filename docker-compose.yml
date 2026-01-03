@@ -9,6 +9,6 @@ services:
     environment:
       - LETTERBOXD_USERNAME=${LETTERBOXD_USERNAME}
       - SYNC_SCHEDULE=${SYNC_SCHEDULE:-0 6 * * *}
-      - SYNC_MIN_DELAY=${SYNC_MIN_DELAY:-2.0}
+      - SYNC_MIN_DELAY=${SYNC_MIN_DELAY:-4.0}
       - DATABASE_PATH=/app/data/letterboxd.db
     restart: unless-stopped

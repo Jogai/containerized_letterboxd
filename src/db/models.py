@@ -32,28 +32,36 @@ class Film(Base):
 
     id = Column(Integer, primary_key=True)
     slug = Column(String(300), unique=True, nullable=False, index=True)  # e.g., "the-godfather"
+    letterboxd_id = Column(String(50))  # Letterboxd internal ID
     title = Column(String(500), nullable=False)
+    original_title = Column(String(500))  # Original language title
     year = Column(Integer, index=True)
 
-    # Ratings
+    # Ratings & Popularity
     rating = Column(Float)  # Letterboxd average rating (out of 5)
     rating_count = Column(Integer)
+    watchers_stats_json = Column(JSON)  # {members, fans, likes, reviews, lists}
 
     # Details
     runtime_minutes = Column(Integer)
     tagline = Column(Text)
     description = Column(Text)
     poster_url = Column(String(500))
+    banner_url = Column(String(500))  # Banner image
+    trailer_json = Column(JSON)  # {id, link, embed_url}
+    alternative_titles_json = Column(JSON)  # List of international titles
 
     # Structured data stored as JSON
-    genres_json = Column(JSON)  # ["Drama", "Crime"]
+    genres_json = Column(JSON)  # [{"type": "genre", "name": "Drama", ...}]
     directors_json = Column(JSON)  # [{"name": "Francis Ford Coppola", "slug": "..."}]
-    cast_json = Column(JSON)  # [{"name": "Marlon Brando", "slug": "...", "character": "..."}]
-    countries_json = Column(JSON)
-    languages_json = Column(JSON)
-    studios_json = Column(JSON)
+    crew_json = Column(JSON)  # Full crew: {director: [...], writer: [...], composer: [...], ...}
+    cast_json = Column(JSON)  # [{"name": "Marlon Brando", "slug": "...", "role_name": "..."}]
+    countries_json = Column(JSON)  # [{"type": "country", "name": "USA", ...}]
+    languages_json = Column(JSON)  # [{"type": "language", "name": "English", ...}]
+    studios_json = Column(JSON)  # [{"type": "studio", "name": "Paramount", ...}]
+    popular_reviews_json = Column(JSON)  # Top 12 reviews
 
-    # Metadata
+    # External IDs & Links
     letterboxd_url = Column(String(500))
     tmdb_id = Column(String(50))
     imdb_id = Column(String(50))

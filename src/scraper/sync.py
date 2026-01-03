@@ -18,13 +18,13 @@ logger = logging.getLogger(__name__)
 class LetterboxdSync:
     """Sync Letterboxd data to database."""
 
-    def __init__(self, username: str, min_delay: float = 2.0):
+    def __init__(self, username: str, min_delay: float = 4.0):
         """
         Initialize sync for a user.
 
         Args:
             username: Letterboxd username to sync
-            min_delay: Seconds between API requests (default: 2.0)
+            min_delay: Seconds between API requests (default: 4.0)
         """
         self.username = username
         self.client = LetterboxdClient(min_delay=min_delay)
@@ -55,8 +55,13 @@ class LetterboxdSync:
             "diary_entries": 0,
             "watchlist_items": 0,
             "films_synced": 0,
+            "films_failed": 0,
+            "failed_slugs": [],
             "errors": []
         }
+
+        # Track failures during sync
+        self._failed_films = []
 
         try:
             # Sync user profile
@@ -81,10 +86,20 @@ class LetterboxdSync:
 
             # Count films
             stats["films_synced"] = db.query(Film).count()
+            stats["films_failed"] = len(self._failed_films)
+            stats["failed_slugs"] = self._failed_films
 
-            sync_log.status = "completed"
+            # Log failure summary
+            if self._failed_films:
+                logger.warning(f"Failed to fetch {len(self._failed_films)} films:")
+                for slug, error in self._failed_films:
+                    logger.warning(f"  - {slug}: {error}")
+
+            sync_log.status = "completed" if not self._failed_films else "completed_with_errors"
             sync_log.completed_at = datetime.utcnow()
             sync_log.items_processed = diary_count + watchlist_count
+            if self._failed_films:
+                sync_log.error_message = f"Failed films: {[s for s, _ in self._failed_films]}"
 
         except Exception as e:
             logger.error(f"Sync failed: {e}")
@@ -93,6 +108,9 @@ class LetterboxdSync:
             stats["errors"].append(str(e))
 
         db.commit()
+
+        # Final summary
+        logger.info(f"Sync complete: {stats['films_synced']} films, {stats['films_failed']} failed")
         return stats
 
     def _sync_user(self, db: Session) -> User:
@@ -122,12 +140,19 @@ class LetterboxdSync:
         as watched, even if they never logged a specific watch date.
         """
         watched_films = self.client.get_user_films(self.username)
+        total = len(watched_films)
         count = 0
 
-        for film_data in watched_films:
+        logger.info(f"Processing {total} watched films...")
+
+        for i, film_data in enumerate(watched_films):
             film_slug = film_data.get("slug")
             if not film_slug:
                 continue
+
+            # Progress log every 50 films
+            if (i + 1) % 50 == 0:
+                logger.info(f"Progress: {i + 1}/{total} films processed")
 
             # Get or create film
             film = self._get_or_create_film(db, film_slug, fetch_details)
@@ -318,24 +343,48 @@ class LetterboxdSync:
         if fetch_details:
             try:
                 details = self.client.get_film(slug)
+                # Identity
                 film.title = details.get("title") or slug
+                film.original_title = details.get("original_title")
                 film.year = details.get("year")
-                film.rating = details.get("rating")
+                film.letterboxd_id = details.get("letterboxd_id")
+                film.alternative_titles_json = details.get("alternative_titles")
+
+                # Media
+                film.poster_url = details.get("poster")
+                film.banner_url = details.get("banner")
+                film.trailer_json = details.get("trailer")
+
+                # Metadata
                 film.runtime_minutes = details.get("runtime")
                 film.tagline = details.get("tagline")
                 film.description = details.get("description")
-                film.poster_url = details.get("poster")
                 film.genres_json = details.get("genres")
+
+                # Ratings & Popularity
+                film.rating = details.get("rating")
+                film.watchers_stats_json = details.get("watchers_stats")
+
+                # People
                 film.directors_json = details.get("directors")
+                film.crew_json = details.get("crew")
                 film.cast_json = details.get("cast")
+
+                # Details
                 film.countries_json = details.get("countries")
                 film.languages_json = details.get("languages")
                 film.studios_json = details.get("studios")
+
+                # Reviews
+                film.popular_reviews_json = details.get("popular_reviews")
+
+                # External
                 film.letterboxd_url = details.get("url")
                 film.tmdb_id = details.get("tmdb_id")
                 film.imdb_id = details.get("imdb_id")
             except Exception as e:
                 logger.warning(f"Failed to fetch details for {slug}: {e}")
+                self._failed_films.append((slug, str(e)))
                 film.title = slug
         else:
             film.title = slug
@@ -345,7 +394,7 @@ class LetterboxdSync:
         return film
 
 
-def run_sync(username: str, fetch_details: bool = True, min_delay: float = 2.0) -> dict:
+def run_sync(username: str, fetch_details: bool = True, min_delay: float = 4.0) -> dict:
     """
     Run a full sync for a user.
 

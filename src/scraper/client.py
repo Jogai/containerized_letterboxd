@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 class RateLimiter:
     """Simple rate limiter with configurable delay between requests."""
 
-    def __init__(self, min_delay: float = 2.0):
+    def __init__(self, min_delay: float = 4.0):
         self.min_delay = min_delay
         self.last_request_time: Optional[float] = None
 
@@ -36,7 +36,7 @@ class RateLimiter:
 
 
 # Global rate limiter instance
-_rate_limiter = RateLimiter(min_delay=2.0)
+_rate_limiter = RateLimiter(min_delay=4.0)
 
 
 def rate_limited(func):
@@ -51,12 +51,12 @@ def rate_limited(func):
 class LetterboxdClient:
     """Rate-limited Letterboxd client wrapping letterboxdpy."""
 
-    def __init__(self, min_delay: float = 2.0):
+    def __init__(self, min_delay: float = 4.0):
         """
         Initialize client with rate limiting.
 
         Args:
-            min_delay: Minimum seconds between requests (default: 2.0)
+            min_delay: Minimum seconds between requests (default: 4.0)
         """
         self.rate_limiter = RateLimiter(min_delay=min_delay)
 
@@ -218,7 +218,7 @@ class LetterboxdClient:
         Args:
             slug: Film slug (e.g., "the-godfather")
 
-        Returns dict with full film details.
+        Returns dict with full film details including all available metadata.
         """
         self._wait()
         logger.info(f"Fetching film details: {slug}")
@@ -229,26 +229,79 @@ class LetterboxdClient:
             logger.error(f"FAILED to fetch film '{slug}': {e}")
             raise
 
-        # Directors are in crew dict, not a direct attribute
+        # Full crew dict (director, writer, composer, cinematography, etc.)
         crew = getattr(movie, "crew", {}) or {}
         directors = crew.get("director", [])
 
+        # Parse details array into countries, languages, studios
+        details = getattr(movie, "details", []) or []
+        countries = [d for d in details if d.get("type") == "country"]
+        languages = [d for d in details if d.get("type") == "language"]
+        studios = [d for d in details if d.get("type") == "studio"]
+
+        # Extract TMDB ID from link (e.g., "https://www.themoviedb.org/movie/238/" -> "238")
+        import re
+        tmdb_link = getattr(movie, "tmdb_link", None)
+        tmdb_id = None
+        if tmdb_link:
+            match = re.search(r'/movie/(\d+)', tmdb_link)
+            if match:
+                tmdb_id = match.group(1)
+
+        # Extract IMDB ID from link (e.g., "http://www.imdb.com/title/tt0068646/" -> "tt0068646")
+        imdb_link = getattr(movie, "imdb_link", None)
+        imdb_id = None
+        if imdb_link:
+            match = re.search(r'/title/(tt\d+)', imdb_link)
+            if match:
+                imdb_id = match.group(1)
+
+        # Fetch watchers stats (requires extra page load, but valuable data)
+        watchers_stats = None
+        try:
+            watchers_stats = movie.get_watchers_stats()
+        except Exception as e:
+            logger.warning(f"Failed to get watchers stats for {slug}: {e}")
+
         return {
+            # Identity
             "slug": slug,
+            "letterboxd_id": getattr(movie, "id", None),
             "title": getattr(movie, "title", None),
+            "original_title": getattr(movie, "original_title", None),
             "year": getattr(movie, "year", None),
-            "rating": getattr(movie, "rating", None),
+            "alternative_titles": getattr(movie, "alternative_titles", []),
+
+            # Media
+            "poster": getattr(movie, "poster", None),
+            "banner": getattr(movie, "banner", None),
+            "trailer": getattr(movie, "trailer", None),
+
+            # Metadata
             "runtime": getattr(movie, "runtime", None),
             "tagline": getattr(movie, "tagline", None),
             "description": getattr(movie, "description", None),
-            "poster": getattr(movie, "poster", None),
             "genres": getattr(movie, "genres", []),
+
+            # Ratings & Popularity
+            "rating": getattr(movie, "rating", None),
+            "watchers_stats": watchers_stats,
+
+            # People
             "directors": directors,
+            "crew": crew,
             "cast": getattr(movie, "cast", []),
-            "countries": getattr(movie, "countries", []),
-            "languages": getattr(movie, "languages", []),
-            "studios": getattr(movie, "studios", []),
+
+            # Details
+            "countries": countries,
+            "languages": languages,
+            "studios": studios,
+
+            # Reviews
+            "popular_reviews": getattr(movie, "popular_reviews", []),
+
+            # External
             "url": getattr(movie, "url", None),
-            "tmdb_id": getattr(movie, "tmdb_id", None),
-            "imdb_id": getattr(movie, "imdb_id", None),
+            "tmdb_id": tmdb_id,
+            "imdb_id": imdb_id,
         }

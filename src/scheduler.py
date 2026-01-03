@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 # Configuration from environment
 LETTERBOXD_USERNAME = os.environ.get("LETTERBOXD_USERNAME")
 SYNC_SCHEDULE = os.environ.get("SYNC_SCHEDULE", "0 6 * * *")  # Default: daily at 6 AM
-SYNC_MIN_DELAY = float(os.environ.get("SYNC_MIN_DELAY", "2.0"))  # Seconds between requests
+SYNC_MIN_DELAY = float(os.environ.get("SYNC_MIN_DELAY", "4.0"))  # Seconds between requests
 
 
 def sync_job():

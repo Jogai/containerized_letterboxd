@@ -76,7 +76,11 @@ class LetterboxdClient:
         self._wait()
         logger.info(f"Fetching user profile: {username}")
 
-        user = User(username)
+        try:
+            user = User(username)
+        except Exception as e:
+            logger.error(f"FAILED to fetch user '{username}': {e}")
+            raise
         return {
             "username": user.username,
             "display_name": getattr(user, "display_name", None),
@@ -96,8 +100,12 @@ class LetterboxdClient:
         self._wait()
         logger.info(f"Fetching watched films for: {username}")
 
-        user = User(username)
-        films_data = user.get_films()
+        try:
+            user = User(username)
+            films_data = user.get_films()
+        except Exception as e:
+            logger.error(f"FAILED to fetch watched films for '{username}': {e}")
+            raise
 
         # films_data structure: {movies: {slug: {name, id, rating, year, liked}}, count, liked_count}
         result = []
@@ -132,12 +140,15 @@ class LetterboxdClient:
         self._wait()
         logger.info(f"Fetching diary for: {username}" + (f" (year={year})" if year else ""))
 
-        user = User(username)
-
-        if year:
-            diary_data = user.get_diary(year=year)
-        else:
-            diary_data = user.get_diary()
+        try:
+            user = User(username)
+            if year:
+                diary_data = user.get_diary(year=year)
+            else:
+                diary_data = user.get_diary()
+        except Exception as e:
+            logger.error(f"FAILED to fetch diary for '{username}': {e}")
+            raise
 
         # Convert diary data to list
         # Structure: {'entries': {'entry_id': {'name': ..., 'slug': ..., 'actions': {...}, 'date': {...}}}}
@@ -180,9 +191,13 @@ class LetterboxdClient:
         self._wait()
         logger.info(f"Fetching watchlist for: {username}")
 
-        user = User(username)
-        # get_watchlist_movies() returns {film_id: {slug, name, year, url}}
-        watchlist_data = user.get_watchlist_movies()
+        try:
+            user = User(username)
+            # get_watchlist_movies() returns {film_id: {slug, name, year, url}}
+            watchlist_data = user.get_watchlist_movies()
+        except Exception as e:
+            logger.error(f"FAILED to fetch watchlist for '{username}': {e}")
+            raise
 
         result = []
         if isinstance(watchlist_data, dict):
@@ -208,7 +223,11 @@ class LetterboxdClient:
         self._wait()
         logger.info(f"Fetching film details: {slug}")
 
-        movie = Movie(slug)
+        try:
+            movie = Movie(slug)
+        except Exception as e:
+            logger.error(f"FAILED to fetch film '{slug}': {e}")
+            raise
 
         # Directors are in crew dict, not a direct attribute
         crew = getattr(movie, "crew", {}) or {}

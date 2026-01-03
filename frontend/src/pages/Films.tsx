@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Select, SelectItem } from '@tremor/react';
 import { useFilms } from '../hooks/useApi';
 
@@ -56,7 +57,7 @@ export default function Films() {
 
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
         {filteredFilms.map((film) => (
-          <div key={film.id} className="group relative">
+          <Link key={film.id} to={`/films/${film.id}`} className="group relative">
             <div className={`aspect-[2/3] bg-[#2c3440] rounded-lg overflow-hidden mb-2 ${!film.in_diary ? 'ring-2 ring-[#456] ring-opacity-50' : ''}`}>
               {film.poster_url ? (
                 <img
@@ -86,11 +87,11 @@ export default function Films() {
                 </div>
               )}
             </div>
-            <p className="text-sm text-white truncate">{film.title}</p>
+            <p className="text-sm text-white truncate group-hover:text-[#00e054]">{film.title}</p>
             <p className="text-xs text-[#99aabb]">
               {film.year} {film.rating ? `• ★ ${film.rating}` : ''}
             </p>
-          </div>
+          </Link>
         ))}
       </div>
     </div>

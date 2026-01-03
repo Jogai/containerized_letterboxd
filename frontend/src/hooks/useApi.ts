@@ -70,3 +70,64 @@ export function useDiary(year?: number, month?: number) {
 
   return { data, loading };
 }
+
+export function useFilmDetail(filmId: number | null) {
+  const [data, setData] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!filmId) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    fetch(`${API_BASE}/films/${filmId}`)
+      .then(res => res.json())
+      .then(setData)
+      .finally(() => setLoading(false));
+  }, [filmId]);
+
+  return { data, loading };
+}
+
+export function useWatchlist() {
+  const [data, setData] = useState<Film[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/watchlist`)
+      .then(res => res.json())
+      .then(setData)
+      .finally(() => setLoading(false));
+  }, []);
+
+  return { data, loading };
+}
+
+export function useReviews() {
+  const [data, setData] = useState<DiaryEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/reviews`)
+      .then(res => res.json())
+      .then(setData)
+      .finally(() => setLoading(false));
+  }, []);
+
+  return { data, loading };
+}
+
+export function useProfile() {
+  const [data, setData] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/profile`)
+      .then(res => res.json())
+      .then(setData)
+      .finally(() => setLoading(false));
+  }, []);
+
+  return { data, loading };
+}

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useDiary } from '../hooks/useApi';
 
 export default function Diary() {
@@ -40,8 +41,9 @@ export default function Diary() {
             {monthEntries.map((entry) => {
               const date = entry.watched_date ? new Date(entry.watched_date) : null;
               return (
-                <div
+                <Link
                   key={entry.id}
+                  to={`/films/${entry.film.id}`}
                   className="flex items-center gap-4 p-3 bg-[#1c2228] rounded-lg hover:bg-[#2c3440] transition-colors"
                 >
                   <div className="w-12 text-center">
@@ -64,7 +66,7 @@ export default function Diary() {
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-white font-medium truncate">{entry.film.title}</p>
+                    <p className="text-white font-medium truncate hover:text-[#00e054]">{entry.film.title}</p>
                     <p className="text-sm text-[#99aabb]">
                       {entry.film.year}
                       {entry.rewatch && ' • Rewatch'}
@@ -82,7 +84,7 @@ export default function Diary() {
                       </span>
                     )}
                   </div>
-                </div>
+                </Link>
               );
             })}
           </div>

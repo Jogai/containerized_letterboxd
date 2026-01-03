@@ -56,5 +56,6 @@ export interface DiaryEntry {
   rating: number;
   rewatch: boolean;
   liked: boolean;
+  review_text?: string;
   film: Film;
 }

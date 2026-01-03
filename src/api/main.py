@@ -265,6 +265,60 @@ def get_films(
     return result
 
 
+@app.get("/api/films/{film_id}")
+def get_film_detail(film_id: int, db: Session = Depends(get_db)):
+    """Get detailed information for a single film."""
+    film = db.query(Film).filter(Film.id == film_id).first()
+    if not film:
+        raise HTTPException(status_code=404, detail="Film not found")
+
+    # Get user's relationship with this film
+    user_film = db.query(UserFilm).filter(UserFilm.film_id == film_id).first()
+
+    # Get diary entries for this film
+    diary_entries = db.query(DiaryEntry).filter(DiaryEntry.film_id == film_id).order_by(DiaryEntry.watched_date.desc()).all()
+
+    return {
+        "id": film.id,
+        "slug": film.slug,
+        "title": film.title,
+        "year": film.year,
+        "poster_url": film.poster_url,
+        "letterboxd_url": film.letterboxd_url,
+        "letterboxd_rating": film.rating,
+        "runtime_minutes": film.runtime_minutes,
+        "tagline": film.tagline,
+        "description": film.description,
+        "genres": [g.get("name") for g in (film.genres_json or []) if isinstance(g, dict) and g.get("type") == "genre"],
+        "directors": [d.get("name") for d in (film.directors_json or []) if isinstance(d, dict)],
+        "cast": [{"name": c.get("name"), "character": c.get("character")} for c in (film.cast_json or [])[:10] if isinstance(c, dict)],
+        "countries": film.countries_json or [],
+        "languages": film.languages_json or [],
+        "studios": film.studios_json or [],
+        "tmdb_id": film.tmdb_id,
+        "imdb_id": film.imdb_id,
+        # User data
+        "user_rating": user_film.rating if user_film else None,
+        "liked": user_film.liked if user_film else False,
+        "watch_count": user_film.watch_count if user_film else 0,
+        "first_watched": user_film.first_watched.isoformat() if user_film and user_film.first_watched else None,
+        "last_watched": user_film.last_watched.isoformat() if user_film and user_film.last_watched else None,
+        "in_watchlist": db.query(WatchlistItem).filter(WatchlistItem.film_id == film_id).first() is not None,
+        # Diary entries
+        "diary_entries": [
+            {
+                "id": e.id,
+                "watched_date": e.watched_date.isoformat() if e.watched_date else None,
+                "rating": e.rating,
+                "liked": e.liked,
+                "rewatch": e.rewatch,
+                "review_text": e.review_text,
+            }
+            for e in diary_entries
+        ],
+    }
+
+
 @app.get("/api/diary")
 def get_diary(
     year: Optional[int] = None,
@@ -310,6 +364,80 @@ def get_diary(
             })
 
     return result
+
+
+@app.get("/api/watchlist")
+def get_watchlist(db: Session = Depends(get_db)):
+    """Get user's watchlist."""
+    watchlist_items = db.query(WatchlistItem).all()
+    films = {f.id: f for f in db.query(Film).all()}
+
+    result = []
+    for item in watchlist_items:
+        film = films.get(item.film_id)
+        if film:
+            result.append({
+                "id": film.id,
+                "title": film.title,
+                "year": film.year,
+                "poster_url": film.poster_url,
+                "letterboxd_rating": film.rating,
+                "runtime_minutes": film.runtime_minutes,
+                "genres": [g.get("name") for g in (film.genres_json or []) if isinstance(g, dict) and g.get("type") == "genre"],
+                "directors": [d.get("name") for d in (film.directors_json or []) if isinstance(d, dict)],
+                "added_date": item.added_date.isoformat() if item.added_date else None,
+            })
+
+    return result
+
+
+@app.get("/api/reviews")
+def get_reviews(db: Session = Depends(get_db)):
+    """Get all diary entries with reviews."""
+    entries = db.query(DiaryEntry).filter(
+        DiaryEntry.review_text.isnot(None),
+        DiaryEntry.review_text != ""
+    ).order_by(DiaryEntry.watched_date.desc()).all()
+
+    films = {f.id: f for f in db.query(Film).all()}
+
+    result = []
+    for e in entries:
+        film = films.get(e.film_id)
+        if film:
+            result.append({
+                "id": e.id,
+                "watched_date": e.watched_date.isoformat() if e.watched_date else None,
+                "rating": e.rating,
+                "liked": e.liked,
+                "review_text": e.review_text,
+                "film": {
+                    "id": film.id,
+                    "title": film.title,
+                    "year": film.year,
+                    "poster_url": film.poster_url,
+                }
+            })
+
+    return result
+
+
+@app.get("/api/profile")
+def get_profile(db: Session = Depends(get_db)):
+    """Get user profile."""
+    user = db.query(User).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="No user found")
+
+    return {
+        "username": user.username,
+        "display_name": user.display_name,
+        "bio": user.bio,
+        "location": user.location,
+        "website": user.website,
+        "favorites": user.favorites_json or [],
+        "stats": user.stats_json or {},
+    }
 
 
 @app.get("/api/calendar")

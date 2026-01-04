@@ -54,3 +54,7 @@ The initial sync may take a few minutes depending on how many films you've logge
 
 - **Backend** — Python, FastAPI, SQLAlchemy, SQLite
 - **Frontend** — React, TypeScript, Tailwind CSS, Tremor
+
+---
+
+This product uses the TMDB API but is not endorsed or certified by TMDB. Not affiliated with Letterboxd.

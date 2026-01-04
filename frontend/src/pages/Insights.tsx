@@ -1,7 +1,24 @@
 import { useState } from 'react';
-import { Card, Title, Text, Metric, Flex, ProgressBar } from '@tremor/react';
+import {
+  Card,
+  Title,
+  Text,
+  Metric,
+  Flex,
+  ProgressBar,
+  BarChart,
+  DonutChart,
+  Grid,
+} from '@tremor/react';
 import { Link } from 'react-router-dom';
 import { useInsights } from '../hooks/useApi';
+
+function formatCurrency(num: number): string {
+  if (num >= 1_000_000_000) return `$${(num / 1_000_000_000).toFixed(1)}B`;
+  if (num >= 1_000_000) return `$${(num / 1_000_000).toFixed(0)}M`;
+  if (num >= 1_000) return `$${(num / 1_000).toFixed(0)}K`;
+  return `$${num}`;
+}
 
 function LegendModal({ onClose }: { onClose: () => void }) {
   return (
@@ -11,7 +28,6 @@ function LegendModal({ onClose }: { onClose: () => void }) {
         onClick={(e) => e.stopPropagation()}
       >
         <h3 className="text-lg font-bold text-white mb-4">Rating Personality Legend</h3>
-
         <div className="space-y-4">
           <div>
             <p className="text-[#99aabb] text-xs uppercase mb-2">Personality Types</p>
@@ -33,15 +49,12 @@ function LegendModal({ onClose }: { onClose: () => void }) {
               </div>
             </div>
           </div>
-
           <div className="pt-4 border-t border-[#2c3440]">
             <p className="text-[#99aabb] text-sm">
               The gap is calculated as your average rating minus the Letterboxd community average.
-              A negative gap means you rate lower than most people.
             </p>
           </div>
         </div>
-
         <button
           onClick={onClose}
           className="mt-6 w-full py-2 bg-[#2c3440] hover:bg-[#3c4450] text-white rounded transition-colors"
@@ -120,9 +133,18 @@ export default function Insights() {
     );
   }
 
-  const { rating_stats, underrated_by_letterboxd, overrated_by_letterboxd } = data;
+  const {
+    rating_stats,
+    underrated_by_letterboxd,
+    overrated_by_letterboxd,
+    genre_ratings,
+    director_ratings,
+    actor_ratings,
+    financial,
+    certification_breakdown,
+    top_keywords,
+  } = data;
 
-  // Personality titles and descriptions
   const personalities: Record<string, { title: string; description: string; color: string }> = {
     harsh: {
       title: 'The Tough Critic',
@@ -142,12 +164,38 @@ export default function Insights() {
   };
 
   const personality = personalities[rating_stats.personality] || personalities.balanced;
-
-  // Calculate progress bar position (0-100 scale, 50 = balanced)
   const progressValue = Math.max(0, Math.min(100, 50 + (rating_stats.avg_gap * 25)));
 
-  const topGems = underrated_by_letterboxd.slice(0, 5);
-  const topUnpopular = overrated_by_letterboxd.slice(0, 5);
+  const topGems = underrated_by_letterboxd?.slice(0, 5) || [];
+  const topUnpopular = overrated_by_letterboxd?.slice(0, 5) || [];
+
+  // Prepare genre chart data (top 10 by rating, min 5 films)
+  const genreChartData = (genre_ratings || [])
+    .filter((g: any) => g.rated_count >= 5 && g.avg_rating)
+    .slice(0, 10)
+    .map((g: any) => ({
+      name: g.name,
+      "Avg Rating": g.avg_rating,
+      "Films": g.count,
+    }));
+
+  // Prepare director chart data (top 10 by rating)
+  const directorChartData = (director_ratings || [])
+    .filter((d: any) => d.avg_rating)
+    .slice(0, 10)
+    .map((d: any) => ({
+      name: `${d.name} (${d.count})`,
+      "Avg Rating": d.avg_rating,
+    }));
+
+  // Prepare actor chart data (top 10 by rating)
+  const actorChartData = (actor_ratings || [])
+    .filter((a: any) => a.avg_rating)
+    .slice(0, 10)
+    .map((a: any) => ({
+      name: `${a.name} (${a.count})`,
+      "Avg Rating": a.avg_rating,
+    }));
 
   return (
     <div className="space-y-8">
@@ -204,115 +252,300 @@ export default function Insights() {
 
       {showLegend && <LegendModal onClose={() => setShowLegend(false)} />}
 
-      {/* Hidden Gems */}
-      <div>
-        <h2 className="text-2xl font-bold text-white mb-2">Your Hidden Gems</h2>
-        <p className="text-[#99aabb] mb-6">
-          {underrated_by_letterboxd.length} films you loved more than most people
-        </p>
+      {/* Financial Insights */}
+      {financial && (
+        <div>
+          <h2 className="text-2xl font-bold text-white mb-6">Box Office Power</h2>
+          <Grid numItemsMd={2} numItemsLg={4} className="gap-6 mb-6">
+            <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
+              <Text className="text-[#99aabb]">Total Budget Watched</Text>
+              <Metric className="text-[#00e054]">{formatCurrency(financial.total_budget)}</Metric>
+              <Text className="text-[#99aabb] mt-2">Combined production budgets</Text>
+            </Card>
+            <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
+              <Text className="text-[#99aabb]">Total Box Office</Text>
+              <Metric className="text-[#f5c518]">{formatCurrency(financial.total_revenue)}</Metric>
+              <Text className="text-[#99aabb] mt-2">Combined worldwide revenue</Text>
+            </Card>
+            <Card className="bg-[#1c2228] border-[#2c3440] ring-0 col-span-2">
+              <Title className="text-white">Budget Distribution</Title>
+              <Text className="text-[#99aabb]">What kind of films do you watch?</Text>
+              <BarChart
+                className="mt-4 h-32"
+                data={financial.budget_distribution}
+                index="category"
+                categories={['count']}
+                colors={['emerald']}
+                showLegend={false}
+                showGridLines={false}
+                yAxisWidth={40}
+              />
+            </Card>
+          </Grid>
 
-        {/* Top 5 poster grid */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          {topGems.map((film: RatedFilm) => (
-            <Link to={`/films/${film.film_id}`} key={film.film_id} className="group">
-              <div className="relative">
-                <div className="aspect-[2/3] bg-[#2c3440] rounded-lg overflow-hidden mb-2">
-                  {film.poster_url ? (
-                    <img
-                      src={film.poster_url}
-                      alt={film.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-[#99aabb] text-xs text-center p-2">
-                      {film.title}
+          <Grid numItemsMd={2} className="gap-6">
+            {/* Top Budget Films */}
+            <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
+              <Title className="text-white">Biggest Budget Films</Title>
+              <Text className="text-[#99aabb]">Most expensive productions you've watched</Text>
+              <div className="mt-4 space-y-3">
+                {financial.top_budget?.slice(0, 5).map((film: any) => (
+                  <div key={film.film_id} className="flex items-center gap-3">
+                    <div className="w-10 h-14 bg-[#2c3440] rounded overflow-hidden flex-shrink-0">
+                      {film.poster_url && (
+                        <img src={film.poster_url} alt={film.title} className="w-full h-full object-cover" />
+                      )}
                     </div>
-                  )}
-                </div>
-                <div className="absolute top-2 right-2 bg-[#00e054] text-[#14181c] text-xs font-bold px-2 py-1 rounded">
-                  +{film.gap.toFixed(1)}
-                </div>
+                    <div className="flex-1 min-w-0">
+                      <Link to={`/films/${film.film_id}`} className="text-white hover:text-[#00e054] text-sm truncate block">
+                        {film.title}
+                      </Link>
+                      <Text className="text-[#99aabb] text-xs">{film.year}</Text>
+                    </div>
+                    <Text className="text-[#00e054] font-medium">{formatCurrency(film.budget)}</Text>
+                  </div>
+                ))}
               </div>
-              <p className="text-sm text-white truncate">{film.title}</p>
-              <p className="text-xs text-[#99aabb]">
-                You: {film.user_rating} vs LB: {film.letterboxd_rating}
-              </p>
-            </Link>
-          ))}
-        </div>
+            </Card>
 
-        {/* Expandable table */}
-        {underrated_by_letterboxd.length > 5 && (
-          <div className="mt-4">
-            <button
-              onClick={() => setShowAllGems(!showAllGems)}
-              className="text-[#00e054] hover:text-[#00ff66] text-sm font-medium"
-            >
-              {showAllGems
-                ? 'Hide full list'
-                : `Show all ${underrated_by_letterboxd.length} hidden gems`}
-            </button>
-            {showAllGems && (
-              <FilmTable films={underrated_by_letterboxd} gapColor="text-[#00e054]" />
-            )}
-          </div>
+            {/* Best ROI Films */}
+            <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
+              <Title className="text-white">Best ROI Films</Title>
+              <Text className="text-[#99aabb]">Most profitable films you've watched</Text>
+              <div className="mt-4 space-y-3">
+                {financial.best_roi?.slice(0, 5).map((film: any) => (
+                  <div key={film.film_id} className="flex items-center gap-3">
+                    <div className="w-10 h-14 bg-[#2c3440] rounded overflow-hidden flex-shrink-0">
+                      {film.poster_url && (
+                        <img src={film.poster_url} alt={film.title} className="w-full h-full object-cover" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <Link to={`/films/${film.film_id}`} className="text-white hover:text-[#00e054] text-sm truncate block">
+                        {film.title}
+                      </Link>
+                      <Text className="text-[#99aabb] text-xs">{formatCurrency(film.budget)} → {formatCurrency(film.revenue)}</Text>
+                    </div>
+                    <Text className="text-[#00e054] font-bold">+{film.roi}%</Text>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </Grid>
+        </div>
+      )}
+
+      {/* Genre Ratings */}
+      {genreChartData.length > 0 && (
+        <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
+          <Title className="text-white">Your Genre Preferences</Title>
+          <Text className="text-[#99aabb]">Average rating by genre (min 5 films)</Text>
+          <BarChart
+            className="mt-6 h-72"
+            data={genreChartData}
+            index="name"
+            categories={['Avg Rating']}
+            colors={['cyan']}
+            showLegend={false}
+            showGridLines={false}
+            yAxisWidth={48}
+            layout="vertical"
+            valueFormatter={(v) => v.toFixed(2)}
+          />
+        </Card>
+      )}
+
+      {/* Director & Actor Ratings */}
+      <Grid numItemsMd={2} className="gap-6">
+        {directorChartData.length > 0 && (
+          <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
+            <Title className="text-white">Directors You Rate Highest</Title>
+            <Text className="text-[#99aabb]">Average rating (2+ films)</Text>
+            <BarChart
+              className="mt-4 h-64"
+              data={directorChartData}
+              index="name"
+              categories={['Avg Rating']}
+              colors={['violet']}
+              showLegend={false}
+              showGridLines={false}
+              yAxisWidth={48}
+              layout="vertical"
+              valueFormatter={(v) => v.toFixed(2)}
+            />
+          </Card>
         )}
-      </div>
+
+        {actorChartData.length > 0 && (
+          <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
+            <Title className="text-white">Actors You Rate Highest</Title>
+            <Text className="text-[#99aabb]">Average rating (3+ films)</Text>
+            <BarChart
+              className="mt-4 h-64"
+              data={actorChartData}
+              index="name"
+              categories={['Avg Rating']}
+              colors={['fuchsia']}
+              showLegend={false}
+              showGridLines={false}
+              yAxisWidth={48}
+              layout="vertical"
+              valueFormatter={(v) => v.toFixed(2)}
+            />
+          </Card>
+        )}
+      </Grid>
+
+      {/* Certification & Keywords */}
+      <Grid numItemsMd={2} className="gap-6">
+        {certification_breakdown && certification_breakdown.length > 0 && (
+          <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
+            <Title className="text-white">Content Ratings</Title>
+            <Text className="text-[#99aabb]">Distribution of film certifications</Text>
+            <DonutChart
+              className="mt-6 h-52"
+              data={certification_breakdown}
+              category="count"
+              index="certification"
+              colors={['rose', 'amber', 'emerald', 'cyan', 'violet', 'fuchsia', 'blue']}
+              showLabel={true}
+              showAnimation={true}
+            />
+          </Card>
+        )}
+
+        {top_keywords && top_keywords.length > 0 && (
+          <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
+            <Title className="text-white">Common Themes</Title>
+            <Text className="text-[#99aabb]">Keywords and themes in your films</Text>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {top_keywords.map((kw: any, i: number) => (
+                <span
+                  key={kw.keyword}
+                  className="px-3 py-1 rounded-full text-sm"
+                  style={{
+                    backgroundColor: `rgba(0, 224, 84, ${0.1 + (1 - i / top_keywords.length) * 0.3})`,
+                    color: i < 5 ? '#00e054' : '#99aabb',
+                    fontWeight: i < 5 ? 600 : 400,
+                  }}
+                >
+                  {kw.keyword} ({kw.count})
+                </span>
+              ))}
+            </div>
+          </Card>
+        )}
+      </Grid>
+
+      {/* Hidden Gems */}
+      {topGems.length > 0 && (
+        <div>
+          <h2 className="text-2xl font-bold text-white mb-2">Your Hidden Gems</h2>
+          <p className="text-[#99aabb] mb-6">
+            {underrated_by_letterboxd.length} films you loved more than most people
+          </p>
+
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            {topGems.map((film: RatedFilm) => (
+              <Link to={`/films/${film.film_id}`} key={film.film_id} className="group">
+                <div className="relative">
+                  <div className="aspect-[2/3] bg-[#2c3440] rounded-lg overflow-hidden mb-2">
+                    {film.poster_url ? (
+                      <img
+                        src={film.poster_url}
+                        alt={film.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-[#99aabb] text-xs text-center p-2">
+                        {film.title}
+                      </div>
+                    )}
+                  </div>
+                  <div className="absolute top-2 right-2 bg-[#00e054] text-[#14181c] text-xs font-bold px-2 py-1 rounded">
+                    +{film.gap.toFixed(1)}
+                  </div>
+                </div>
+                <p className="text-sm text-white truncate">{film.title}</p>
+                <p className="text-xs text-[#99aabb]">
+                  You: {film.user_rating} vs LB: {film.letterboxd_rating}
+                </p>
+              </Link>
+            ))}
+          </div>
+
+          {underrated_by_letterboxd.length > 5 && (
+            <div className="mt-4">
+              <button
+                onClick={() => setShowAllGems(!showAllGems)}
+                className="text-[#00e054] hover:text-[#00ff66] text-sm font-medium"
+              >
+                {showAllGems
+                  ? 'Hide full list'
+                  : `Show all ${underrated_by_letterboxd.length} hidden gems`}
+              </button>
+              {showAllGems && (
+                <FilmTable films={underrated_by_letterboxd} gapColor="text-[#00e054]" />
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Unpopular Opinions */}
-      <div>
-        <h2 className="text-2xl font-bold text-white mb-2">Your Unpopular Opinions</h2>
-        <p className="text-[#99aabb] mb-6">
-          {overrated_by_letterboxd.length} films others loved more than you
-        </p>
+      {topUnpopular.length > 0 && (
+        <div>
+          <h2 className="text-2xl font-bold text-white mb-2">Your Unpopular Opinions</h2>
+          <p className="text-[#99aabb] mb-6">
+            {overrated_by_letterboxd.length} films others loved more than you
+          </p>
 
-        {/* Top 5 poster grid */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          {topUnpopular.map((film: RatedFilm) => (
-            <Link to={`/films/${film.film_id}`} key={film.film_id} className="group">
-              <div className="relative">
-                <div className="aspect-[2/3] bg-[#2c3440] rounded-lg overflow-hidden mb-2">
-                  {film.poster_url ? (
-                    <img
-                      src={film.poster_url}
-                      alt={film.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-[#99aabb] text-xs text-center p-2">
-                      {film.title}
-                    </div>
-                  )}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            {topUnpopular.map((film: RatedFilm) => (
+              <Link to={`/films/${film.film_id}`} key={film.film_id} className="group">
+                <div className="relative">
+                  <div className="aspect-[2/3] bg-[#2c3440] rounded-lg overflow-hidden mb-2">
+                    {film.poster_url ? (
+                      <img
+                        src={film.poster_url}
+                        alt={film.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-[#99aabb] text-xs text-center p-2">
+                        {film.title}
+                      </div>
+                    )}
+                  </div>
+                  <div className="absolute top-2 right-2 bg-[#ff8000] text-[#14181c] text-xs font-bold px-2 py-1 rounded">
+                    {film.gap.toFixed(1)}
+                  </div>
                 </div>
-                <div className="absolute top-2 right-2 bg-[#ff8000] text-[#14181c] text-xs font-bold px-2 py-1 rounded">
-                  {film.gap.toFixed(1)}
-                </div>
-              </div>
-              <p className="text-sm text-white truncate">{film.title}</p>
-              <p className="text-xs text-[#99aabb]">
-                You: {film.user_rating} vs LB: {film.letterboxd_rating}
-              </p>
-            </Link>
-          ))}
-        </div>
-
-        {/* Expandable table */}
-        {overrated_by_letterboxd.length > 5 && (
-          <div className="mt-4">
-            <button
-              onClick={() => setShowAllUnpopular(!showAllUnpopular)}
-              className="text-[#ff8000] hover:text-[#ff9933] text-sm font-medium"
-            >
-              {showAllUnpopular
-                ? 'Hide full list'
-                : `Show all ${overrated_by_letterboxd.length} unpopular opinions`}
-            </button>
-            {showAllUnpopular && (
-              <FilmTable films={overrated_by_letterboxd} gapColor="text-[#ff8000]" />
-            )}
+                <p className="text-sm text-white truncate">{film.title}</p>
+                <p className="text-xs text-[#99aabb]">
+                  You: {film.user_rating} vs LB: {film.letterboxd_rating}
+                </p>
+              </Link>
+            ))}
           </div>
-        )}
-      </div>
+
+          {overrated_by_letterboxd.length > 5 && (
+            <div className="mt-4">
+              <button
+                onClick={() => setShowAllUnpopular(!showAllUnpopular)}
+                className="text-[#ff8000] hover:text-[#ff9933] text-sm font-medium"
+              >
+                {showAllUnpopular
+                  ? 'Hide full list'
+                  : `Show all ${overrated_by_letterboxd.length} unpopular opinions`}
+              </button>
+              {showAllUnpopular && (
+                <FilmTable films={overrated_by_letterboxd} gapColor="text-[#ff8000]" />
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

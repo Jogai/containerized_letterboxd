@@ -412,11 +412,15 @@ def get_dashboard(db: Session = Depends(get_db)):
 
 @app.get("/api/insights")
 def get_insights(db: Session = Depends(get_db)):
-    """Get derived insights and analytics."""
+    """Get comprehensive insights and analytics (Letterboxd + TMDB combined)."""
     user_films = db.query(UserFilm).filter(UserFilm.watched == True).all()
-    films = {f.id: f for f in db.query(Film).all()}
+    user_films_by_id = {uf.film_id: uf for uf in user_films}
+    watched_film_ids = set(user_films_by_id.keys())
 
-    # Calculate rating gaps for all films with both ratings
+    films = {f.id: f for f in db.query(Film).filter(Film.id.in_(watched_film_ids)).all()}
+    tmdb_films = {t.film_id: t for t in db.query(TmdbFilm).filter(TmdbFilm.film_id.in_(watched_film_ids)).all()}
+
+    # === RATING STATS (existing) ===
     rated_films = []
     for uf in user_films:
         film = films.get(uf.film_id)
@@ -432,17 +436,13 @@ def get_insights(db: Session = Depends(get_db)):
                 "film_id": film.id,
             })
 
-    # Calculate average ratings and gap
     if rated_films:
         avg_user = sum(f["user_rating"] for f in rated_films) / len(rated_films)
         avg_lb = sum(f["letterboxd_rating"] for f in rated_films) / len(rated_films)
         avg_gap = avg_user - avg_lb
     else:
-        avg_user = 0
-        avg_lb = 0
-        avg_gap = 0
+        avg_user = avg_lb = avg_gap = 0
 
-    # Determine personality
     if avg_gap < -0.3:
         personality = "harsh"
     elif avg_gap > 0.3:
@@ -450,18 +450,162 @@ def get_insights(db: Session = Depends(get_db)):
     else:
         personality = "balanced"
 
-    # Sort by gap to find extremes (return ALL, not just top 10)
-    # Underrated by LB = user rated higher (positive gap, sorted desc)
-    underrated = sorted(
-        [f for f in rated_films if f["gap"] > 0],
-        key=lambda x: x["gap"],
-        reverse=True
-    )
-    # Overrated by LB = user rated lower (negative gap, sorted asc)
-    overrated = sorted(
-        [f for f in rated_films if f["gap"] < 0],
-        key=lambda x: x["gap"]
-    )
+    underrated = sorted([f for f in rated_films if f["gap"] > 0], key=lambda x: x["gap"], reverse=True)
+    overrated = sorted([f for f in rated_films if f["gap"] < 0], key=lambda x: x["gap"])
+
+    # === GENRE RATINGS ===
+    genre_stats = {}  # genre_name -> {ratings: [], count: 0}
+    for uf in user_films:
+        film = films.get(uf.film_id)
+        if not film or not film.genres_json:
+            continue
+        for g in film.genres_json:
+            name = g.get("name") if isinstance(g, dict) else None
+            if not name:
+                continue
+            if name not in genre_stats:
+                genre_stats[name] = {"ratings": [], "count": 0}
+            genre_stats[name]["count"] += 1
+            if uf.rating:
+                genre_stats[name]["ratings"].append(uf.rating)
+
+    genre_ratings = []
+    for name, stats in genre_stats.items():
+        avg_rating = round(sum(stats["ratings"]) / len(stats["ratings"]), 2) if stats["ratings"] else None
+        genre_ratings.append({
+            "name": name,
+            "count": stats["count"],
+            "rated_count": len(stats["ratings"]),
+            "avg_rating": avg_rating,
+        })
+    genre_ratings.sort(key=lambda x: x["avg_rating"] or 0, reverse=True)
+
+    # === DIRECTOR RATINGS ===
+    director_stats = {}
+    for uf in user_films:
+        film = films.get(uf.film_id)
+        if not film or not film.directors_json:
+            continue
+        for d in film.directors_json:
+            name = d.get("name") if isinstance(d, dict) else None
+            if not name:
+                continue
+            if name not in director_stats:
+                director_stats[name] = {"ratings": [], "count": 0}
+            director_stats[name]["count"] += 1
+            if uf.rating:
+                director_stats[name]["ratings"].append(uf.rating)
+
+    director_ratings = []
+    for name, stats in director_stats.items():
+        if stats["count"] >= 2:  # Only directors with 2+ films
+            avg_rating = round(sum(stats["ratings"]) / len(stats["ratings"]), 2) if stats["ratings"] else None
+            director_ratings.append({
+                "name": name,
+                "count": stats["count"],
+                "rated_count": len(stats["ratings"]),
+                "avg_rating": avg_rating,
+            })
+    director_ratings.sort(key=lambda x: (x["avg_rating"] or 0, x["count"]), reverse=True)
+
+    # === ACTOR RATINGS ===
+    actor_stats = {}
+    for uf in user_films:
+        film = films.get(uf.film_id)
+        if not film or not film.cast_json:
+            continue
+        for a in film.cast_json[:5]:  # Top 5 billed actors per film
+            name = a.get("name") if isinstance(a, dict) else None
+            if not name:
+                continue
+            if name not in actor_stats:
+                actor_stats[name] = {"ratings": [], "count": 0}
+            actor_stats[name]["count"] += 1
+            if uf.rating:
+                actor_stats[name]["ratings"].append(uf.rating)
+
+    actor_ratings = []
+    for name, stats in actor_stats.items():
+        if stats["count"] >= 3:  # Only actors with 3+ films
+            avg_rating = round(sum(stats["ratings"]) / len(stats["ratings"]), 2) if stats["ratings"] else None
+            actor_ratings.append({
+                "name": name,
+                "count": stats["count"],
+                "rated_count": len(stats["ratings"]),
+                "avg_rating": avg_rating,
+            })
+    actor_ratings.sort(key=lambda x: (x["avg_rating"] or 0, x["count"]), reverse=True)
+
+    # === FINANCIAL (from TMDB) ===
+    total_budget = 0
+    total_revenue = 0
+    budget_distribution = {"indie": 0, "mid": 0, "blockbuster": 0}  # <10M, 10-50M, >50M
+    films_with_budget = []
+    films_with_roi = []
+
+    for film_id, tmdb in tmdb_films.items():
+        film = films.get(film_id)
+        if not film:
+            continue
+
+        if tmdb.budget and tmdb.budget > 0:
+            total_budget += tmdb.budget
+            if tmdb.budget < 10_000_000:
+                budget_distribution["indie"] += 1
+            elif tmdb.budget < 50_000_000:
+                budget_distribution["mid"] += 1
+            else:
+                budget_distribution["blockbuster"] += 1
+
+            films_with_budget.append({
+                "title": film.title,
+                "year": film.year,
+                "poster_url": film.poster_url,
+                "budget": tmdb.budget,
+                "film_id": film.id,
+            })
+
+        if tmdb.revenue and tmdb.revenue > 0:
+            total_revenue += tmdb.revenue
+            if tmdb.budget and tmdb.budget > 0:
+                roi = round((tmdb.revenue / tmdb.budget - 1) * 100, 1)
+                films_with_roi.append({
+                    "title": film.title,
+                    "year": film.year,
+                    "poster_url": film.poster_url,
+                    "budget": tmdb.budget,
+                    "revenue": tmdb.revenue,
+                    "roi": roi,
+                    "film_id": film.id,
+                })
+
+    top_budget = sorted(films_with_budget, key=lambda x: x["budget"], reverse=True)[:10]
+    best_roi = sorted(films_with_roi, key=lambda x: x["roi"], reverse=True)[:10]
+
+    # === CERTIFICATION BREAKDOWN ===
+    cert_counts = Counter()
+    for tmdb in tmdb_films.values():
+        if tmdb.certification:
+            cert_counts[tmdb.certification] += 1
+
+    certification_breakdown = [
+        {"certification": cert, "count": count}
+        for cert, count in cert_counts.most_common()
+    ]
+
+    # === KEYWORDS ===
+    keyword_counts = Counter()
+    for tmdb in tmdb_films.values():
+        if tmdb.keywords_json:
+            for kw in tmdb.keywords_json[:10]:  # Top 10 keywords per film
+                name = kw.get("name") if isinstance(kw, dict) else None
+                if name:
+                    keyword_counts[name] += 1
+
+    top_keywords = [
+        {"keyword": kw, "count": count}
+        for kw, count in keyword_counts.most_common(25)
+    ]
 
     return {
         "rating_stats": {
@@ -473,6 +617,22 @@ def get_insights(db: Session = Depends(get_db)):
         },
         "underrated_by_letterboxd": underrated,
         "overrated_by_letterboxd": overrated,
+        "genre_ratings": genre_ratings,
+        "director_ratings": director_ratings[:20],
+        "actor_ratings": actor_ratings[:20],
+        "financial": {
+            "total_budget": total_budget,
+            "total_revenue": total_revenue,
+            "budget_distribution": [
+                {"category": "Indie (<$10M)", "count": budget_distribution["indie"]},
+                {"category": "Mid ($10-50M)", "count": budget_distribution["mid"]},
+                {"category": "Blockbuster (>$50M)", "count": budget_distribution["blockbuster"]},
+            ],
+            "top_budget": top_budget,
+            "best_roi": best_roi,
+        },
+        "certification_breakdown": certification_breakdown,
+        "top_keywords": top_keywords,
     }
 
 

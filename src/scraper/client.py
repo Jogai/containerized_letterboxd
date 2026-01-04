@@ -35,7 +35,6 @@ class RateLimiter:
         self.last_request_time = time.time()
 
 
-# Global rate limiter instance
 _rate_limiter = RateLimiter(min_delay=4.0)
 
 
@@ -107,7 +106,6 @@ class LetterboxdClient:
             logger.error(f"FAILED to fetch watched films for '{username}': {e}")
             raise
 
-        # films_data structure: {movies: {slug: {name, id, rating, year, liked}}, count, liked_count}
         result = []
         if isinstance(films_data, dict):
             movies = films_data.get("movies", {})
@@ -115,7 +113,6 @@ class LetterboxdClient:
                 for slug, data in movies.items():
                     if not isinstance(data, dict):
                         continue
-                    # Rating is 0-10 in letterboxdpy, convert to 0.5-5 scale
                     raw_rating = data.get("rating")
                     rating = raw_rating / 2.0 if raw_rating else None
                     result.append({
@@ -150,8 +147,6 @@ class LetterboxdClient:
             logger.error(f"FAILED to fetch diary for '{username}': {e}")
             raise
 
-        # Convert diary data to list
-        # Structure: {'entries': {'entry_id': {'name': ..., 'slug': ..., 'actions': {...}, 'date': {...}}}}
         entries = []
         if isinstance(diary_data, dict):
             entries_dict = diary_data.get("entries", diary_data)
@@ -161,12 +156,10 @@ class LetterboxdClient:
                 actions = data.get("actions", {})
                 date_info = data.get("date", {})
 
-                # Convert date dict to string
                 date_str = None
                 if isinstance(date_info, dict) and date_info.get("year"):
                     date_str = f"{date_info['year']}-{date_info.get('month', 1):02d}-{date_info.get('day', 1):02d}"
 
-                # Rating is 0-10 in letterboxdpy, convert to 0.5-5 scale
                 raw_rating = actions.get("rating")
                 rating = raw_rating / 2.0 if raw_rating else None
 
@@ -192,7 +185,6 @@ class LetterboxdClient:
 
         try:
             user = User(username)
-            # get_watchlist_movies() returns {film_id: {slug, name, year, url}}
             watchlist_data = user.get_watchlist_movies()
         except Exception as e:
             logger.error(f"FAILED to fetch watchlist for '{username}': {e}")
@@ -228,17 +220,14 @@ class LetterboxdClient:
             logger.error(f"FAILED to fetch film '{slug}': {e}")
             raise
 
-        # Full crew dict (director, writer, composer, cinematography, etc.)
         crew = getattr(movie, "crew", {}) or {}
         directors = crew.get("director", [])
 
-        # Parse details array into countries, languages, studios
         details = getattr(movie, "details", []) or []
         countries = [d for d in details if d.get("type") == "country"]
         languages = [d for d in details if d.get("type") == "language"]
         studios = [d for d in details if d.get("type") == "studio"]
 
-        # Extract TMDB ID from link (e.g., "https://www.themoviedb.org/movie/238/" -> "238")
         import re
         tmdb_link = getattr(movie, "tmdb_link", None)
         tmdb_id = None
@@ -247,7 +236,6 @@ class LetterboxdClient:
             if match:
                 tmdb_id = match.group(1)
 
-        # Extract IMDB ID from link (e.g., "http://www.imdb.com/title/tt0068646/" -> "tt0068646")
         imdb_link = getattr(movie, "imdb_link", None)
         imdb_id = None
         if imdb_link:
@@ -255,7 +243,6 @@ class LetterboxdClient:
             if match:
                 imdb_id = match.group(1)
 
-        # Fetch watchers stats (requires extra page load, but valuable data)
         watchers_stats = None
         try:
             watchers_stats = movie.get_watchers_stats()
@@ -263,7 +250,6 @@ class LetterboxdClient:
             logger.warning(f"Failed to get watchers stats for {slug}: {e}")
 
         return {
-            # Identity
             "slug": slug,
             "letterboxd_id": getattr(movie, "id", None),
             "title": getattr(movie, "title", None),
@@ -271,35 +257,28 @@ class LetterboxdClient:
             "year": getattr(movie, "year", None),
             "alternative_titles": getattr(movie, "alternative_titles", []),
 
-            # Media
             "poster": getattr(movie, "poster", None),
             "banner": getattr(movie, "banner", None),
             "trailer": getattr(movie, "trailer", None),
 
-            # Metadata
             "runtime": getattr(movie, "runtime", None),
             "tagline": getattr(movie, "tagline", None),
             "description": getattr(movie, "description", None),
             "genres": getattr(movie, "genres", []),
 
-            # Ratings & Popularity
             "rating": getattr(movie, "rating", None),
             "watchers_stats": watchers_stats,
 
-            # People
             "directors": directors,
             "crew": crew,
             "cast": getattr(movie, "cast", []),
 
-            # Details
             "countries": countries,
             "languages": languages,
             "studios": studios,
 
-            # Reviews
             "popular_reviews": getattr(movie, "popular_reviews", []),
 
-            # External
             "url": getattr(movie, "url", None),
             "tmdb_id": tmdb_id,
             "imdb_id": imdb_id,

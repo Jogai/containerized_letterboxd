@@ -40,14 +40,11 @@ export default function FilmDetail() {
 
   return (
     <div className="space-y-8">
-      {/* Back link */}
       <Link to="/films" className="text-[#99aabb] hover:text-white text-sm">
         &larr; Back to films
       </Link>
 
-      {/* Header */}
       <div className="flex flex-col md:flex-row gap-8">
-        {/* Poster */}
         <div className="w-48 flex-shrink-0">
           {film.poster_url ? (
             <img
@@ -62,7 +59,6 @@ export default function FilmDetail() {
           )}
         </div>
 
-        {/* Info */}
         <div className="flex-1 space-y-4">
           <div>
             <h1 className="text-3xl font-bold text-white">{film.title}</h1>
@@ -72,19 +68,16 @@ export default function FilmDetail() {
             </p>
           </div>
 
-          {/* Directors */}
           {film.directors?.length > 0 && (
             <p className="text-[#99aabb]">
               Directed by <span className="text-white">{film.directors.join(', ')}</span>
             </p>
           )}
 
-          {/* Tagline */}
           {film.tagline && (
             <p className="text-[#99aabb] italic">"{film.tagline}"</p>
           )}
 
-          {/* Ratings */}
           <div className="flex gap-6">
             {film.user_rating && (
               <div>
@@ -106,7 +99,6 @@ export default function FilmDetail() {
             )}
           </div>
 
-          {/* Watch info */}
           {film.watch_count > 0 && (
             <p className="text-[#99aabb]">
               Watched <span className="text-white">{film.watch_count} time{film.watch_count > 1 ? 's' : ''}</span>
@@ -119,7 +111,6 @@ export default function FilmDetail() {
             </p>
           )}
 
-          {/* Genres */}
           {film.genres?.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {film.genres.map((genre: string) => (
@@ -130,7 +121,6 @@ export default function FilmDetail() {
             </div>
           )}
 
-          {/* External links */}
           <div className="flex gap-4 pt-2">
             {film.letterboxd_url && (
               <a
@@ -166,7 +156,6 @@ export default function FilmDetail() {
         </div>
       </div>
 
-      {/* Description */}
       {film.description && (
         <div>
           <h2 className="text-lg font-semibold text-white mb-2">Synopsis</h2>
@@ -174,7 +163,6 @@ export default function FilmDetail() {
         </div>
       )}
 
-      {/* Cast */}
       {film.cast?.length > 0 && (
         <div>
           <h2 className="text-lg font-semibold text-white mb-2">Cast</h2>
@@ -191,7 +179,6 @@ export default function FilmDetail() {
         </div>
       )}
 
-      {/* Details */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {film.countries?.length > 0 && (
           <div>
@@ -213,7 +200,6 @@ export default function FilmDetail() {
         )}
       </div>
 
-      {/* Diary entries */}
       {film.diary_entries?.length > 0 && (
         <div>
           <h2 className="text-lg font-semibold text-white mb-4">Your Watches</h2>
@@ -247,10 +233,8 @@ export default function FilmDetail() {
         </div>
       )}
 
-      {/* TMDB Data Section */}
       {film.tmdb && (
         <div className="space-y-6">
-          {/* Box Office */}
           {(film.tmdb.budget || film.tmdb.revenue) && (
             <div>
               <h2 className="text-lg font-semibold text-white mb-4">Box Office</h2>
@@ -285,7 +269,6 @@ export default function FilmDetail() {
             </div>
           )}
 
-          {/* Collection */}
           {film.tmdb.collection && (
             <div>
               <h2 className="text-lg font-semibold text-white mb-4">Part of Collection</h2>
@@ -295,7 +278,6 @@ export default function FilmDetail() {
             </div>
           )}
 
-          {/* Keywords */}
           {film.tmdb.keywords?.length > 0 && (
             <div>
               <h2 className="text-lg font-semibold text-white mb-4">Themes & Keywords</h2>

@@ -173,7 +173,6 @@ export default function Insights() {
   const topGems = underrated_by_letterboxd?.slice(0, 5) || [];
   const topUnpopular = overrated_by_letterboxd?.slice(0, 5) || [];
 
-  // Prepare genre chart data (top 10 by rating, min 5 films)
   const genreChartData = (genre_ratings || [])
     .filter((g: any) => g.rated_count >= 5 && g.avg_rating)
     .slice(0, 10)
@@ -183,7 +182,6 @@ export default function Insights() {
       "Films": g.count,
     }));
 
-  // Prepare director chart data (top 10 by rating)
   const directorChartData = (director_ratings || [])
     .filter((d: any) => d.avg_rating)
     .slice(0, 10)
@@ -192,7 +190,6 @@ export default function Insights() {
       "Avg Rating": d.avg_rating,
     }));
 
-  // Prepare actor chart data (top 10 by rating)
   const actorChartData = (actor_ratings || [])
     .filter((a: any) => a.avg_rating)
     .slice(0, 10)
@@ -210,7 +207,6 @@ export default function Insights() {
         </p>
       </div>
 
-      {/* Rating Personality */}
       <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
         <Title className="text-white">Your Rating Personality</Title>
         <div className="mt-6 text-center">
@@ -258,7 +254,6 @@ export default function Insights() {
 
       {showLegend && <LegendModal onClose={() => setShowLegend(false)} />}
 
-      {/* Financial Insights */}
       {financial && (
         <div>
           <h2 className="text-2xl font-bold text-white mb-6">Box Office Power</h2>
@@ -290,7 +285,6 @@ export default function Insights() {
           </Grid>
 
           <Grid numItemsMd={2} className="gap-6">
-            {/* Top Budget Films */}
             <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
               <Title className="text-white">Biggest Budget Films</Title>
               <Text className="text-[#99aabb]">Most expensive productions you've watched</Text>
@@ -314,7 +308,6 @@ export default function Insights() {
               </div>
             </Card>
 
-            {/* Best ROI Films */}
             <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
               <Title className="text-white">Best ROI Films</Title>
               <Text className="text-[#99aabb]">Most profitable films you've watched</Text>
@@ -341,7 +334,6 @@ export default function Insights() {
         </div>
       )}
 
-      {/* Genre Ratings */}
       {genreChartData.length > 0 && (
         <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
           <Title className="text-white">Your Genre Preferences</Title>
@@ -361,7 +353,6 @@ export default function Insights() {
         </Card>
       )}
 
-      {/* Director & Actor Ratings */}
       <Grid numItemsMd={2} className="gap-6">
         {directorChartData.length > 0 && (
           <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
@@ -402,7 +393,6 @@ export default function Insights() {
         )}
       </Grid>
 
-      {/* Certification & Keywords */}
       <Grid numItemsMd={2} className="gap-6">
         {certification_breakdown && certification_breakdown.length > 0 && (
           <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
@@ -425,7 +415,6 @@ export default function Insights() {
             <Title className="text-white">Theme Preferences</Title>
             <Text className="text-[#99aabb]">Keywords you rate highest vs lowest (min 3 films)</Text>
             <div className="mt-4 grid grid-cols-2 gap-4">
-              {/* Best keywords */}
               <div>
                 <Text className="text-[#00e054] font-medium mb-2">Themes you love</Text>
                 <div className="space-y-1">
@@ -437,7 +426,6 @@ export default function Insights() {
                   ))}
                 </div>
               </div>
-              {/* Worst keywords */}
               <div>
                 <Text className="text-[#ff8000] font-medium mb-2">Themes you dislike</Text>
                 <div className="space-y-1">
@@ -454,7 +442,6 @@ export default function Insights() {
         )}
       </Grid>
 
-      {/* Rating Trends Over Time */}
       {rating_trends && rating_trends.length > 1 && (
         <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
           <Title className="text-white">Your Rating Trends</Title>
@@ -474,7 +461,6 @@ export default function Insights() {
         </Card>
       )}
 
-      {/* Decade Preferences */}
       {decade_ratings && decade_ratings.length > 0 && (
         <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
           <Title className="text-white">Decade Preferences</Title>
@@ -493,7 +479,6 @@ export default function Insights() {
         </Card>
       )}
 
-      {/* Collections/Franchises */}
       {collections && collections.length > 0 && (
         <div>
           <h2 className="text-2xl font-bold text-white mb-2">Your Franchises</h2>
@@ -532,7 +517,6 @@ export default function Insights() {
         </div>
       )}
 
-      {/* Hidden Gems */}
       {topGems.length > 0 && (
         <div>
           <h2 className="text-2xl font-bold text-white mb-2">Your Hidden Gems</h2>
@@ -587,7 +571,6 @@ export default function Insights() {
         </div>
       )}
 
-      {/* Unpopular Opinions */}
       {topUnpopular.length > 0 && (
         <div>
           <h2 className="text-2xl font-bold text-white mb-2">Your Unpopular Opinions</h2>

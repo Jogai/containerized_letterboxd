@@ -25,11 +25,9 @@ export interface DashboardStats {
     watched_date: string;
     poster_url?: string;
   }[];
-  // Datamaxx stats
   total_watched: number;
   total_logged: number;
   total_unlogged: number;
-  // New stats
   top_actors?: { name: string; count: number }[];
   runtime_stats?: {
     avg_runtime: number;
@@ -54,14 +52,12 @@ export interface DashboardStats {
     poster_url?: string;
     rating?: number;
   }[];
-  // Additional raw data stats
   top_countries?: { name: string; count: number }[];
   top_languages?: { name: string; count: number }[];
   top_studios?: { name: string; count: number }[];
   top_writers?: { name: string; count: number }[];
   top_composers?: { name: string; count: number }[];
   top_cinematographers?: { name: string; count: number }[];
-  // Watching patterns
   day_of_week?: { day: string; count: number }[];
   binge_days?: number;
   max_in_one_day?: number;
@@ -79,7 +75,6 @@ export interface Film {
   poster_url?: string;
   genres?: string[];
   directors?: string[];
-  // Datamaxx fields
   watch_count?: number;
   liked?: boolean;
   first_watched?: string;

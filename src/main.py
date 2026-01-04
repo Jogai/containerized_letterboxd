@@ -11,19 +11,17 @@ from src.scheduler import create_scheduler
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    force=True  # Clear any existing handlers to avoid duplicates
+    force=True
 )
 
 logger = logging.getLogger(__name__)
 
 
 def main():
-    # Start the scheduler
     scheduler = create_scheduler()
     scheduler.start()
     logger.info("Scheduler started")
 
-    # Run the API server (log_config=None prevents uvicorn from adding duplicate handlers)
     uvicorn.run(app, host="0.0.0.0", port=8000, log_config=None)
 
 

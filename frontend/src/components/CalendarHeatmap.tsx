@@ -18,10 +18,8 @@ export default function CalendarHeatmap() {
     return <div className="h-32 animate-pulse bg-[#2c3440] rounded" />;
   }
 
-  // Create a map of date -> count
   const countMap = new Map(data.map(d => [d.date, d.count]));
 
-  // Generate the last 365 days
   const today = new Date();
   const days: { date: Date; count: number }[] = [];
 
@@ -35,14 +33,12 @@ export default function CalendarHeatmap() {
     });
   }
 
-  // Group by weeks
   const weeks: typeof days[] = [];
   let currentWeek: typeof days = [];
 
-  // Pad the first week
   const firstDayOfWeek = days[0].date.getDay();
   for (let i = 0; i < firstDayOfWeek; i++) {
-    currentWeek.push({ date: new Date(0), count: -1 }); // placeholder
+    currentWeek.push({ date: new Date(0), count: -1 });
   }
 
   for (const day of days) {
@@ -56,7 +52,6 @@ export default function CalendarHeatmap() {
     weeks.push(currentWeek);
   }
 
-  // Calculate month labels
   const monthLabels: { label: string; weekIndex: number }[] = [];
   let lastMonth = -1;
   weeks.forEach((week, weekIndex) => {
@@ -93,7 +88,6 @@ export default function CalendarHeatmap() {
 
       <div className="overflow-x-auto">
         <div className="inline-flex flex-col gap-1">
-          {/* Month labels */}
           <div className="flex gap-1 mb-1 ml-8">
             {monthLabels.map((m, i) => (
               <div
@@ -109,9 +103,7 @@ export default function CalendarHeatmap() {
             ))}
           </div>
 
-          {/* Grid */}
           <div className="flex gap-1">
-            {/* Day labels */}
             <div className="flex flex-col gap-1 mr-1">
               {DAYS.map((day, i) => (
                 <div key={day} className="h-3 text-xs text-[#99aabb] flex items-center">
@@ -120,7 +112,6 @@ export default function CalendarHeatmap() {
               ))}
             </div>
 
-            {/* Weeks */}
             {weeks.map((week, weekIndex) => (
               <div key={weekIndex} className="flex flex-col gap-1">
                 {week.map((day, dayIndex) => (

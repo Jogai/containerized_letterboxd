@@ -8,7 +8,6 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen bg-[#14181c]">
-      {/* Header */}
       <header className="border-b border-[#2c3440] bg-[#0d1114]">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <NavLink to="/" className="flex items-center gap-3">
@@ -32,12 +31,10 @@ export default function Layout() {
         </div>
       </header>
 
-      {/* Main content */}
       <main className="max-w-7xl mx-auto px-6 py-8">
         <Outlet />
       </main>
 
-      {/* Footer */}
       <footer className="border-t border-[#2c3440] mt-auto">
         <div className="max-w-7xl mx-auto px-6 py-4 text-center text-sm text-[#99aabb]">
           Data synced from Letterboxd + TMDB

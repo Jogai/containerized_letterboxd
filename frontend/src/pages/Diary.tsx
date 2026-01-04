@@ -12,7 +12,6 @@ export default function Diary() {
     );
   }
 
-  // Group entries by month
   const groupedEntries: Record<string, typeof entries> = {};
   entries.forEach((entry) => {
     if (entry.watched_date) {

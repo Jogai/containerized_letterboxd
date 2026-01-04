@@ -17,12 +17,10 @@ function FilmRow({ film, isExpanded, onToggle }: { film: any; isExpanded: boolea
 
   return (
     <div className="border border-[#456] rounded-lg overflow-hidden bg-[#1a1f25]">
-      {/* Summary Row */}
       <div
         className="flex items-center gap-4 p-3 cursor-pointer hover:bg-[#2c3440] transition-colors"
         onClick={onToggle}
       >
-        {/* Poster */}
         <div className="w-12 h-18 flex-shrink-0">
           {film.poster_url ? (
             <img src={film.poster_url} alt={film.title} className="w-full h-full object-cover rounded" />
@@ -33,13 +31,11 @@ function FilmRow({ film, isExpanded, onToggle }: { film: any; isExpanded: boolea
           )}
         </div>
 
-        {/* Title & Year */}
         <div className="flex-1 min-w-0">
           <h3 className="text-white font-medium truncate">{film.title}</h3>
           <p className="text-sm text-[#99aabb]">{film.year}</p>
         </div>
 
-        {/* Ratings */}
         <div className="flex gap-4 text-sm">
           <div className="text-center">
             <div className="text-[#00e054] font-medium">{user.rating ? `★ ${user.rating}` : '-'}</div>
@@ -55,29 +51,24 @@ function FilmRow({ film, isExpanded, onToggle }: { film: any; isExpanded: boolea
           </div>
         </div>
 
-        {/* Certification */}
         <div className="w-12 text-center">
           {tmdb?.certification && (
             <span className="px-2 py-0.5 bg-[#456] text-white text-xs rounded">{tmdb.certification}</span>
           )}
         </div>
 
-        {/* Budget */}
         <div className="w-20 text-right text-sm text-[#99aabb]">
           {formatCurrency(tmdb?.budget)}
         </div>
 
-        {/* Expand Toggle */}
         <div className="w-8 text-center text-[#99aabb]">
           {isExpanded ? '−' : '+'}
         </div>
       </div>
 
-      {/* Expanded Details */}
       {isExpanded && (
         <div className="border-t border-[#456] p-4 bg-[#14181c]">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Letterboxd Data */}
             <div>
               <h4 className="text-[#40bcf4] font-medium mb-3 text-sm uppercase tracking-wide">Letterboxd</h4>
               <div className="space-y-2 text-sm">
@@ -119,7 +110,6 @@ function FilmRow({ film, isExpanded, onToggle }: { film: any; isExpanded: boolea
               </div>
             </div>
 
-            {/* TMDB Data */}
             <div>
               <h4 className="text-[#f5c518] font-medium mb-3 text-sm uppercase tracking-wide">TMDB</h4>
               {tmdb ? (
@@ -192,7 +182,6 @@ function FilmRow({ film, isExpanded, onToggle }: { film: any; isExpanded: boolea
             </div>
           </div>
 
-          {/* User Data */}
           <div className="mt-4 pt-4 border-t border-[#456]">
             <h4 className="text-[#00e054] font-medium mb-3 text-sm uppercase tracking-wide">Your Activity</h4>
             <div className="flex gap-6 text-sm">
@@ -259,7 +248,6 @@ export default function Explorer() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h2 className="text-2xl font-bold text-white">Data Explorer</h2>
         <p className="text-[#99aabb]">
@@ -267,7 +255,6 @@ export default function Explorer() {
         </p>
       </div>
 
-      {/* Controls */}
       <div className="flex flex-wrap gap-4 items-center">
         <form onSubmit={handleSearch} className="flex gap-2">
           <TextInput
@@ -303,7 +290,6 @@ export default function Explorer() {
         </span>
       </div>
 
-      {/* Film List */}
       <div className="space-y-2">
         {films.map((film: any) => (
           <FilmRow
@@ -321,7 +307,6 @@ export default function Explorer() {
         </div>
       )}
 
-      {/* Pagination */}
       {data && data.total_pages > 1 && (
         <div className="flex items-center justify-center gap-2 pt-4">
           <button

@@ -43,7 +43,7 @@ class TmdbSync:
         """
         sync_log = SyncLog(
             sync_type="tmdb",
-            username="system",  # TMDB sync is system-level, not user-specific
+            username="system",
             started_at=datetime.utcnow(),
             status="running"
         )
@@ -60,15 +60,11 @@ class TmdbSync:
         }
 
         try:
-            # Count total films with tmdb_id
             stats["total_films"] = db.query(Film).filter(Film.tmdb_id.isnot(None)).count()
 
-            # Get films that need enrichment
             if force:
-                # Re-fetch all films with tmdb_id
                 query = db.query(Film).filter(Film.tmdb_id.isnot(None))
             else:
-                # Only films without TmdbFilm record
                 query = db.query(Film).outerjoin(TmdbFilm).filter(
                     and_(
                         Film.tmdb_id.isnot(None),
@@ -87,7 +83,7 @@ class TmdbSync:
             for i, film in enumerate(films):
                 if (i + 1) % 10 == 0:
                     logger.info(f"Progress: {i + 1}/{stats['films_to_enrich']} films processed")
-                    db.commit()  # Commit periodically
+                    db.commit()
 
                 result = self._enrich_film(db, film, force)
                 if result == "enriched":
@@ -123,7 +119,6 @@ class TmdbSync:
             logger.debug(f"Skipping {film.slug}: no tmdb_id")
             return "skipped"
 
-        # Check if already enriched
         existing = db.query(TmdbFilm).filter(TmdbFilm.film_id == film.id).first()
         if existing and not force:
             logger.debug(f"Skipping {film.slug}: already enriched")
@@ -147,14 +142,11 @@ class TmdbSync:
 
         try:
             if existing:
-                # Update existing record
                 tmdb_film = existing
             else:
-                # Create new record
                 tmdb_film = TmdbFilm(film_id=film.id)
                 db.add(tmdb_film)
 
-            # Update all fields
             tmdb_film.tmdb_id = data.get("tmdb_id")
             tmdb_film.budget = data.get("budget")
             tmdb_film.revenue = data.get("revenue")

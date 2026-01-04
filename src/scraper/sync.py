@@ -60,36 +60,29 @@ class LetterboxdSync:
             "errors": []
         }
 
-        # Track failures during sync
         self._failed_films = []
 
         try:
-            # Sync user profile
             logger.info(f"Syncing user profile: {self.username}")
             user = self._sync_user(db)
             stats["user_synced"] = True
 
-            # Sync ALL watched films (datamaxx: captures films without diary entries)
             logger.info(f"Syncing watched films for: {self.username}")
             watched_count = self._sync_watched_films(db, user, fetch_film_details)
             stats["watched_films"] = watched_count
 
-            # Sync diary (dated watch logs)
             logger.info(f"Syncing diary for: {self.username}")
             diary_count = self._sync_diary(db, user, fetch_film_details)
             stats["diary_entries"] = diary_count
 
-            # Sync watchlist
             logger.info(f"Syncing watchlist for: {self.username}")
             watchlist_count = self._sync_watchlist(db, user, fetch_film_details)
             stats["watchlist_items"] = watchlist_count
 
-            # Count films
             stats["films_synced"] = db.query(Film).count()
             stats["films_failed"] = len(self._failed_films)
             stats["failed_slugs"] = self._failed_films
 
-            # Log failure summary
             if self._failed_films:
                 logger.warning(f"Failed to fetch {len(self._failed_films)} films:")
                 for slug, error in self._failed_films:
@@ -109,7 +102,6 @@ class LetterboxdSync:
 
         db.commit()
 
-        # Final summary
         logger.info(f"Sync complete: {stats['films_synced']} films, {stats['films_failed']} failed")
         return stats
 
@@ -150,16 +142,13 @@ class LetterboxdSync:
             if not film_slug:
                 continue
 
-            # Progress log every 50 films
             if (i + 1) % 50 == 0:
                 logger.info(f"Progress: {i + 1}/{total} films processed")
 
-            # Get or create film
             film = self._get_or_create_film(db, film_slug, fetch_details)
             if not film:
                 continue
 
-            # Get or create UserFilm
             user_film = db.query(UserFilm).filter(
                 UserFilm.user_id == user.id,
                 UserFilm.film_id == film.id
@@ -174,12 +163,9 @@ class LetterboxdSync:
                 db.add(user_film)
                 count += 1
 
-            # Update with data from watched films list
             user_film.watched = True
-            # Rating from watched films list (may differ from diary entry ratings)
             if film_data.get("rating"):
                 user_film.rating = film_data["rating"]
-            # Liked status from watched films list
             if film_data.get("liked"):
                 user_film.liked = True
             user_film.updated_at = datetime.utcnow()
@@ -200,26 +186,22 @@ class LetterboxdSync:
             if not film_slug:
                 continue
 
-            # Get or create film
             film = self._get_or_create_film(db, film_slug, fetch_details)
             if not film:
                 continue
 
             films_to_update.add(film.id)
 
-            # Check if entry already exists
             existing = db.query(DiaryEntry).filter(
                 DiaryEntry.letterboxd_id == entry_id
             ).first()
 
             if existing:
-                # Update existing entry
                 existing.rating = entry_data.get("rating")
                 existing.rewatch = entry_data.get("rewatch", False)
                 existing.liked = entry_data.get("liked", False)
                 existing.updated_at = datetime.utcnow()
             else:
-                # Create new entry
                 watched_date = None
                 if entry_data.get("date"):
                     try:
@@ -241,7 +223,6 @@ class LetterboxdSync:
 
         db.commit()
 
-        # Update UserFilm aggregates from diary entries
         self._update_user_film_aggregates(db, user, films_to_update)
 
         return count
@@ -251,7 +232,6 @@ class LetterboxdSync:
     ) -> None:
         """Update UserFilm records with aggregated diary data."""
         for film_id in film_ids:
-            # Get all diary entries for this user+film
             entries = db.query(DiaryEntry).filter(
                 DiaryEntry.user_id == user.id,
                 DiaryEntry.film_id == film_id
@@ -260,7 +240,6 @@ class LetterboxdSync:
             if not entries:
                 continue
 
-            # Get or create UserFilm
             user_film = db.query(UserFilm).filter(
                 UserFilm.user_id == user.id,
                 UserFilm.film_id == film_id
@@ -274,17 +253,14 @@ class LetterboxdSync:
                 )
                 db.add(user_film)
 
-            # Compute aggregates
             user_film.watch_count = len(entries)
             user_film.liked = any(e.liked for e in entries)
 
-            # Get dates (filter out None)
             dates = [e.watched_date for e in entries if e.watched_date]
             if dates:
                 user_film.first_watched = min(dates)
                 user_film.last_watched = max(dates)
 
-            # Use most recent rating if available
             rated_entries = [e for e in entries if e.rating]
             if rated_entries:
                 latest_rated = max(rated_entries, key=lambda e: e.watched_date or datetime.min)
@@ -299,7 +275,6 @@ class LetterboxdSync:
         watchlist = self.client.get_user_watchlist(self.username)
         count = 0
 
-        # Get existing watchlist film IDs
         existing_film_ids = {
             w.film_id for w in db.query(WatchlistItem).filter(
                 WatchlistItem.user_id == user.id
@@ -335,48 +310,39 @@ class LetterboxdSync:
         if film:
             return film
 
-        # Create new film
         film = Film(slug=slug)
 
         if fetch_details:
             try:
                 details = self.client.get_film(slug)
-                # Identity
                 film.title = details.get("title") or slug
                 film.original_title = details.get("original_title")
                 film.year = details.get("year")
                 film.letterboxd_id = details.get("letterboxd_id")
                 film.alternative_titles_json = details.get("alternative_titles")
 
-                # Media
                 film.poster_url = details.get("poster")
                 film.banner_url = details.get("banner")
                 film.trailer_json = details.get("trailer")
 
-                # Metadata
                 film.runtime_minutes = details.get("runtime")
                 film.tagline = details.get("tagline")
                 film.description = details.get("description")
                 film.genres_json = details.get("genres")
 
-                # Ratings & Popularity
                 film.rating = details.get("rating")
                 film.watchers_stats_json = details.get("watchers_stats")
 
-                # People
                 film.directors_json = details.get("directors")
                 film.crew_json = details.get("crew")
                 film.cast_json = details.get("cast")
 
-                # Details
                 film.countries_json = details.get("countries")
                 film.languages_json = details.get("languages")
                 film.studios_json = details.get("studios")
 
-                # Reviews
                 film.popular_reviews_json = details.get("popular_reviews")
 
-                # External
                 film.letterboxd_url = details.get("url")
                 film.tmdb_id = details.get("tmdb_id")
                 film.imdb_id = details.get("imdb_id")

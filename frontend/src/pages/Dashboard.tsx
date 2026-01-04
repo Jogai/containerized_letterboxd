@@ -34,7 +34,6 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8">
-      {/* Hero Stats */}
       <div>
         <div className="mb-6">
           <h2 className="text-2xl font-bold text-white">Overview</h2>
@@ -75,7 +74,6 @@ export default function Dashboard() {
           </Card>
         </Grid>
 
-        {/* Secondary Stats Row */}
         <Grid numItemsMd={2} numItemsLg={4} className="gap-6 mt-6">
           <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
             <Text className="text-[#99aabb]">Average Runtime</Text>
@@ -111,7 +109,6 @@ export default function Dashboard() {
         </Grid>
       </div>
 
-      {/* Watching Patterns Stats */}
       <div>
         <h2 className="text-2xl font-bold text-white mb-6">Watching Patterns</h2>
         <Grid numItemsMd={3} className="gap-6">
@@ -141,7 +138,6 @@ export default function Dashboard() {
         </Grid>
       </div>
 
-      {/* Calendar Heatmap */}
       <div>
         <h2 className="text-2xl font-bold text-white mb-6">Watch Activity</h2>
         <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
@@ -149,7 +145,6 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Day of Week Distribution */}
       {data.day_of_week && data.day_of_week.length > 0 && (
         <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
           <Title className="text-white">When You Watch</Title>
@@ -167,9 +162,7 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {/* Charts Row */}
       <Grid numItemsMd={2} className="gap-6">
-        {/* Rating Distribution */}
         <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
           <Title className="text-white">Your Ratings</Title>
           <Text className="text-[#99aabb]">Distribution of your ratings</Text>
@@ -185,7 +178,6 @@ export default function Dashboard() {
           />
         </Card>
 
-        {/* Films by Month */}
         <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
           <Title className="text-white">Films Over Time</Title>
           <Text className="text-[#99aabb]">Monthly watch count</Text>
@@ -202,7 +194,6 @@ export default function Dashboard() {
         </Card>
       </Grid>
 
-      {/* Films by Year */}
       {data.films_by_year && data.films_by_year.length > 0 && (
         <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
           <Title className="text-white">Films by Year</Title>
@@ -220,9 +211,7 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {/* Top Lists */}
       <Grid numItemsMd={2} numItemsLg={4} className="gap-6">
-        {/* Top Genres */}
         <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
           <Title className="text-white">Top Genres</Title>
           <div className="mt-4 space-y-3">
@@ -242,7 +231,6 @@ export default function Dashboard() {
           </div>
         </Card>
 
-        {/* Top Directors */}
         <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
           <Title className="text-white">Top Directors</Title>
           <div className="mt-4 space-y-3">
@@ -262,7 +250,6 @@ export default function Dashboard() {
           </div>
         </Card>
 
-        {/* Top Actors */}
         <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
           <Title className="text-white">Top Actors</Title>
           <div className="mt-4 space-y-3">
@@ -282,7 +269,6 @@ export default function Dashboard() {
           </div>
         </Card>
 
-        {/* Top Decades */}
         <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
           <Title className="text-white">By Decade</Title>
           <DonutChart
@@ -297,7 +283,6 @@ export default function Dashboard() {
         </Card>
       </Grid>
 
-      {/* Runtime Extremes */}
       {data.runtime_stats?.longest && data.runtime_stats?.shortest && (
         <div>
           <h2 className="text-2xl font-bold text-white mb-6">Runtime Extremes</h2>
@@ -346,11 +331,9 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Production Stats */}
       <div>
         <h2 className="text-2xl font-bold text-white mb-6">Where Your Films Come From</h2>
         <Grid numItemsMd={3} className="gap-6">
-          {/* Top Countries */}
           <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
             <Title className="text-white">Top Countries</Title>
             <div className="mt-4 space-y-3">
@@ -370,7 +353,6 @@ export default function Dashboard() {
             </div>
           </Card>
 
-          {/* Top Languages */}
           <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
             <Title className="text-white">Top Languages</Title>
             <div className="mt-4 space-y-3">
@@ -390,7 +372,6 @@ export default function Dashboard() {
             </div>
           </Card>
 
-          {/* Top Studios */}
           <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
             <Title className="text-white">Top Studios</Title>
             <div className="mt-4 space-y-3">
@@ -412,11 +393,9 @@ export default function Dashboard() {
         </Grid>
       </div>
 
-      {/* Crew Stats */}
       <div>
         <h2 className="text-2xl font-bold text-white mb-6">Behind the Camera</h2>
         <Grid numItemsMd={3} className="gap-6">
-          {/* Top Writers */}
           <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
             <Title className="text-white">Top Writers</Title>
             <div className="mt-4 space-y-3">
@@ -436,7 +415,6 @@ export default function Dashboard() {
             </div>
           </Card>
 
-          {/* Top Composers */}
           <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
             <Title className="text-white">Top Composers</Title>
             <div className="mt-4 space-y-3">
@@ -456,7 +434,6 @@ export default function Dashboard() {
             </div>
           </Card>
 
-          {/* Top Cinematographers */}
           <Card className="bg-[#1c2228] border-[#2c3440] ring-0">
             <Title className="text-white">Top Cinematographers</Title>
             <div className="mt-4 space-y-3">
@@ -478,7 +455,6 @@ export default function Dashboard() {
         </Grid>
       </div>
 
-      {/* Recent Films */}
       <div>
         <h2 className="text-2xl font-bold text-white mb-6">Recently Watched</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
@@ -506,7 +482,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Liked Films */}
       {data.liked_films && data.liked_films.length > 0 && (
         <div>
           <h2 className="text-2xl font-bold text-white mb-6">

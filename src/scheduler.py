@@ -19,10 +19,9 @@ from src.scraper.tmdb_sync import run_tmdb_sync
 
 logger = logging.getLogger(__name__)
 
-# Configuration from environment
 LETTERBOXD_USERNAME = os.environ.get("LETTERBOXD_USERNAME")
-SYNC_SCHEDULE = os.environ.get("SYNC_SCHEDULE", "0 6 * * *")  # Default: daily at 6 AM
-SYNC_MIN_DELAY = float(os.environ.get("SYNC_MIN_DELAY", "4.0"))  # Seconds between requests
+SYNC_SCHEDULE = os.environ.get("SYNC_SCHEDULE", "0 6 * * *")
+SYNC_MIN_DELAY = float(os.environ.get("SYNC_MIN_DELAY", "4.0"))
 TMDB_API_KEY = os.environ.get("TMDB_API_KEY")
 
 
@@ -32,16 +31,14 @@ def sync_job():
         logger.error("LETTERBOXD_USERNAME not set, skipping sync")
         return
 
-    # Step 1: Letterboxd sync
     logger.info(f"[1/2] Starting Letterboxd sync for: {LETTERBOXD_USERNAME}")
     try:
         stats = run_sync(LETTERBOXD_USERNAME, fetch_details=True, min_delay=SYNC_MIN_DELAY)
         logger.info(f"[1/2] Letterboxd sync completed: {stats}")
     except Exception as e:
         logger.error(f"[1/2] Letterboxd sync failed: {e}")
-        return  # Don't proceed to TMDB if Letterboxd failed
+        return
 
-    # Step 2: TMDB enrichment (only if API key is configured)
     if not TMDB_API_KEY:
         logger.info("[2/2] TMDB_API_KEY not set, skipping TMDB enrichment")
         return
@@ -59,7 +56,6 @@ def create_scheduler() -> BackgroundScheduler:
     scheduler = BackgroundScheduler()
 
     if LETTERBOXD_USERNAME:
-        # Parse cron schedule (minute hour day month day_of_week)
         parts = SYNC_SCHEDULE.split()
         if len(parts) == 5:
             trigger = CronTrigger(
@@ -85,5 +81,4 @@ if __name__ == "__main__":
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
 
-    # Run immediate sync for testing
     sync_job()

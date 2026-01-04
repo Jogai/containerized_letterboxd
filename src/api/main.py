@@ -24,7 +24,6 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# Serve static files (React build)
 STATIC_DIR = Path("/app/static")
 if STATIC_DIR.exists():
     app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
@@ -35,16 +34,11 @@ def startup():
     init_db()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# API Endpoints
-# ─────────────────────────────────────────────────────────────────────────────
-
 def _full_sync_task(username: str, fetch_details: bool = True):
     """Run Letterboxd sync, then TMDB enrichment."""
     import logging
     logger = logging.getLogger(__name__)
 
-    # Step 1: Letterboxd
     logger.info(f"[1/2] Starting Letterboxd sync for: {username}")
     try:
         stats = run_sync(username, fetch_details)
@@ -53,7 +47,6 @@ def _full_sync_task(username: str, fetch_details: bool = True):
         logger.error(f"[1/2] Letterboxd sync failed: {e}")
         return
 
-    # Step 2: TMDB (if API key configured)
     tmdb_key = os.environ.get("TMDB_API_KEY")
     if not tmdb_key:
         logger.info("[2/2] TMDB_API_KEY not set, skipping TMDB enrichment")
@@ -103,7 +96,6 @@ def get_tmdb_status(db: Session = Depends(get_db)):
         sync = TmdbSync()
         return sync.get_enrichment_status(db)
     except ValueError as e:
-        # API key not configured
         return {
             "error": str(e),
             "total_films": db.query(Film).count(),
@@ -148,16 +140,14 @@ def get_dashboard(db: Session = Depends(get_db)):
     films = db.query(Film).all()
     user_films = db.query(UserFilm).filter(UserFilm.watched == True).all()
 
-    # Efficient lookup structures
     films_dict = {f.id: f for f in films}
     watched_film_ids = {uf.film_id for uf in user_films}
 
-    # Datamaxx stats: total watched vs logged
     total_watched = len(user_films)
     total_logged = sum(1 for uf in user_films if (uf.watch_count or 0) > 0)
     total_unlogged = total_watched - total_logged
 
-    total_films = total_watched  # Now using all watched films
+    total_films = total_watched
     total_runtime = sum(
         films_dict[fid].runtime_minutes or 0
         for fid in watched_film_ids
@@ -165,11 +155,9 @@ def get_dashboard(db: Session = Depends(get_db)):
     )
     total_hours = round(total_runtime / 60, 1)
 
-    # Ratings from user_films (aggregated user ratings for all watched)
     user_ratings = [uf.rating for uf in user_films if uf.rating]
     avg_rating = round(sum(user_ratings) / len(user_ratings), 2) if user_ratings else 0
 
-    # Letterboxd average for all watched films
     lb_ratings = [
         films_dict[fid].rating
         for fid in watched_film_ids
@@ -177,11 +165,9 @@ def get_dashboard(db: Session = Depends(get_db)):
     ]
     letterboxd_avg = round(sum(lb_ratings) / len(lb_ratings), 2) if lb_ratings else 0
 
-    # These need dates, so use diary entries
     films_this_year = sum(1 for e in entries if e.watched_date and e.watched_date >= year_start)
     films_this_month = sum(1 for e in entries if e.watched_date and e.watched_date >= month_start)
 
-    # Top genres (ALL watched films)
     genre_counter = Counter()
     for uf in user_films:
         film = films_dict.get(uf.film_id)
@@ -192,7 +178,6 @@ def get_dashboard(db: Session = Depends(get_db)):
                     genre_counter[name] += 1
     top_genres = [{"name": name, "count": count} for name, count in genre_counter.most_common(10)]
 
-    # Top directors (ALL watched films)
     director_counter = Counter()
     for uf in user_films:
         film = films_dict.get(uf.film_id)
@@ -203,7 +188,6 @@ def get_dashboard(db: Session = Depends(get_db)):
                     director_counter[name] += 1
     top_directors = [{"name": name, "count": count} for name, count in director_counter.most_common(10)]
 
-    # Top decades (ALL watched films)
     decade_counter = Counter()
     for uf in user_films:
         film = films_dict.get(uf.film_id)
@@ -212,7 +196,6 @@ def get_dashboard(db: Session = Depends(get_db)):
             decade_counter[decade] += 1
     top_decades = [{"decade": decade, "count": count} for decade, count in decade_counter.most_common(10)]
 
-    # Rating distribution (from user_films ratings)
     rating_dist = Counter()
     for r in user_ratings:
         rating_dist[r] += 1
@@ -221,7 +204,6 @@ def get_dashboard(db: Session = Depends(get_db)):
         for r in [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5]
     ]
 
-    # Films by month (last 12 months)
     films_by_month = []
     for i in range(11, -1, -1):
         month_date = now - timedelta(days=i * 30)
@@ -234,7 +216,6 @@ def get_dashboard(db: Session = Depends(get_db)):
         )
         films_by_month.append({"month": month_key, "count": count})
 
-    # Films by year
     year_counter = Counter()
     for e in entries:
         if e.watched_date:
@@ -244,7 +225,6 @@ def get_dashboard(db: Session = Depends(get_db)):
         for year, count in sorted(year_counter.items())
     ]
 
-    # Recent films
     recent_entries = sorted(
         [e for e in entries if e.watched_date],
         key=lambda e: e.watched_date,
@@ -262,18 +242,16 @@ def get_dashboard(db: Session = Depends(get_db)):
                 "poster_url": film.poster_url,
             })
 
-    # Top actors (ALL watched films)
     actor_counter = Counter()
     for uf in user_films:
         film = films_dict.get(uf.film_id)
         if film and film.cast_json:
-            for actor in film.cast_json[:5]:  # Top 5 billed actors per film
+            for actor in film.cast_json[:5]:
                 name = actor.get("name") if isinstance(actor, dict) else None
                 if name:
                     actor_counter[name] += 1
     top_actors = [{"name": name, "count": count} for name, count in actor_counter.most_common(10)]
 
-    # Top countries (ALL watched films)
     country_counter = Counter()
     for uf in user_films:
         film = films_dict.get(uf.film_id)
@@ -284,7 +262,6 @@ def get_dashboard(db: Session = Depends(get_db)):
                     country_counter[name] += 1
     top_countries = [{"name": name, "count": count} for name, count in country_counter.most_common(10)]
 
-    # Top languages (ALL watched films)
     language_counter = Counter()
     for uf in user_films:
         film = films_dict.get(uf.film_id)
@@ -295,7 +272,6 @@ def get_dashboard(db: Session = Depends(get_db)):
                     language_counter[name] += 1
     top_languages = [{"name": name, "count": count} for name, count in language_counter.most_common(10)]
 
-    # Top studios (ALL watched films)
     studio_counter = Counter()
     for uf in user_films:
         film = films_dict.get(uf.film_id)
@@ -306,7 +282,6 @@ def get_dashboard(db: Session = Depends(get_db)):
                     studio_counter[name] += 1
     top_studios = [{"name": name, "count": count} for name, count in studio_counter.most_common(10)]
 
-    # Top crew: writers, composers, cinematographers (from crew_json)
     writer_counter = Counter()
     composer_counter = Counter()
     cinematographer_counter = Counter()
@@ -314,17 +289,14 @@ def get_dashboard(db: Session = Depends(get_db)):
         film = films_dict.get(uf.film_id)
         if film and film.crew_json:
             crew = film.crew_json if isinstance(film.crew_json, dict) else {}
-            # Writers
             for person in crew.get("writer", []):
                 name = person.get("name") if isinstance(person, dict) else None
                 if name:
                     writer_counter[name] += 1
-            # Composers
             for person in crew.get("composer", []):
                 name = person.get("name") if isinstance(person, dict) else None
                 if name:
                     composer_counter[name] += 1
-            # Cinematographers
             for person in crew.get("cinematography", []):
                 name = person.get("name") if isinstance(person, dict) else None
                 if name:
@@ -333,7 +305,6 @@ def get_dashboard(db: Session = Depends(get_db)):
     top_composers = [{"name": name, "count": count} for name, count in composer_counter.most_common(10)]
     top_cinematographers = [{"name": name, "count": count} for name, count in cinematographer_counter.most_common(10)]
 
-    # Runtime stats (ALL watched films)
     watched_films_with_runtime = [
         films_dict[fid] for fid in watched_film_ids
         if fid in films_dict and films_dict[fid].runtime_minutes
@@ -361,7 +332,6 @@ def get_dashboard(db: Session = Depends(get_db)):
     else:
         runtime_stats = {"avg_runtime": 0, "longest": None, "shortest": None}
 
-    # Rewatch and liked stats
     total_rewatches = sum(1 for e in entries if e.rewatch)
     total_liked = sum(1 for e in entries if e.liked)
     liked_entries = [e for e in entries if e.liked]
@@ -376,19 +346,14 @@ def get_dashboard(db: Session = Depends(get_db)):
                 "rating": e.rating,
             })
 
-    # === WATCHING PATTERNS ===
-
-    # Day of week distribution
     day_of_week_counter = Counter()
     for e in entries:
         if e.watched_date:
-            day_name = e.watched_date.strftime("%a")  # Mon, Tue, Wed...
+            day_name = e.watched_date.strftime("%a")
             day_of_week_counter[day_name] += 1
-    # Ensure all days are present in order
     days_order = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     day_of_week = [{"day": day, "count": day_of_week_counter.get(day, 0)} for day in days_order]
 
-    # Binge days (days with 2+ films watched)
     films_per_day = Counter()
     for e in entries:
         if e.watched_date:
@@ -397,7 +362,6 @@ def get_dashboard(db: Session = Depends(get_db)):
     binge_days = sum(1 for count in films_per_day.values() if count >= 2)
     max_in_one_day = max(films_per_day.values()) if films_per_day else 0
 
-    # Watch streaks (consecutive days with at least 1 film)
     if films_per_day:
         sorted_days = sorted(films_per_day.keys())
         longest_streak = 1
@@ -427,24 +391,20 @@ def get_dashboard(db: Session = Depends(get_db)):
         "films_by_month": films_by_month,
         "films_by_year": films_by_year,
         "recent_films": recent_films,
-        # Datamaxx stats
         "total_watched": total_watched,
         "total_logged": total_logged,
         "total_unlogged": total_unlogged,
-        # New stats
         "top_actors": top_actors,
         "runtime_stats": runtime_stats,
         "total_rewatches": total_rewatches,
         "total_liked": total_liked,
         "liked_films": liked_films_list,
-        # Additional raw data stats
         "top_countries": top_countries,
         "top_languages": top_languages,
         "top_studios": top_studios,
         "top_writers": top_writers,
         "top_composers": top_composers,
         "top_cinematographers": top_cinematographers,
-        # Watching patterns
         "day_of_week": day_of_week,
         "binge_days": binge_days,
         "max_in_one_day": max_in_one_day,
@@ -462,7 +422,6 @@ def get_insights(db: Session = Depends(get_db)):
     films = {f.id: f for f in db.query(Film).filter(Film.id.in_(watched_film_ids)).all()}
     tmdb_films = {t.film_id: t for t in db.query(TmdbFilm).filter(TmdbFilm.film_id.in_(watched_film_ids)).all()}
 
-    # === RATING STATS (existing) ===
     rated_films = []
     for uf in user_films:
         film = films.get(uf.film_id)
@@ -495,8 +454,7 @@ def get_insights(db: Session = Depends(get_db)):
     underrated = sorted([f for f in rated_films if f["gap"] > 0], key=lambda x: x["gap"], reverse=True)
     overrated = sorted([f for f in rated_films if f["gap"] < 0], key=lambda x: x["gap"])
 
-    # === GENRE RATINGS ===
-    genre_stats = {}  # genre_name -> {ratings: [], count: 0}
+    genre_stats = {}
     for uf in user_films:
         film = films.get(uf.film_id)
         if not film or not film.genres_json:
@@ -522,7 +480,6 @@ def get_insights(db: Session = Depends(get_db)):
         })
     genre_ratings.sort(key=lambda x: x["avg_rating"] or 0, reverse=True)
 
-    # === DIRECTOR RATINGS ===
     director_stats = {}
     for uf in user_films:
         film = films.get(uf.film_id)
@@ -540,7 +497,7 @@ def get_insights(db: Session = Depends(get_db)):
 
     director_ratings = []
     for name, stats in director_stats.items():
-        if stats["count"] >= 2:  # Only directors with 2+ films
+        if stats["count"] >= 2:
             avg_rating = round(sum(stats["ratings"]) / len(stats["ratings"]), 2) if stats["ratings"] else None
             director_ratings.append({
                 "name": name,
@@ -550,13 +507,12 @@ def get_insights(db: Session = Depends(get_db)):
             })
     director_ratings.sort(key=lambda x: (x["avg_rating"] or 0, x["count"]), reverse=True)
 
-    # === ACTOR RATINGS ===
     actor_stats = {}
     for uf in user_films:
         film = films.get(uf.film_id)
         if not film or not film.cast_json:
             continue
-        for a in film.cast_json[:5]:  # Top 5 billed actors per film
+        for a in film.cast_json[:5]:
             name = a.get("name") if isinstance(a, dict) else None
             if not name:
                 continue
@@ -568,7 +524,7 @@ def get_insights(db: Session = Depends(get_db)):
 
     actor_ratings = []
     for name, stats in actor_stats.items():
-        if stats["count"] >= 3:  # Only actors with 3+ films
+        if stats["count"] >= 3:
             avg_rating = round(sum(stats["ratings"]) / len(stats["ratings"]), 2) if stats["ratings"] else None
             actor_ratings.append({
                 "name": name,
@@ -578,10 +534,9 @@ def get_insights(db: Session = Depends(get_db)):
             })
     actor_ratings.sort(key=lambda x: (x["avg_rating"] or 0, x["count"]), reverse=True)
 
-    # === FINANCIAL (from TMDB) ===
     total_budget = 0
     total_revenue = 0
-    budget_distribution = {"indie": 0, "mid": 0, "blockbuster": 0}  # <10M, 10-50M, >50M
+    budget_distribution = {"indie": 0, "mid": 0, "blockbuster": 0}
     films_with_budget = []
     films_with_roi = []
 
@@ -624,7 +579,6 @@ def get_insights(db: Session = Depends(get_db)):
     top_budget = sorted(films_with_budget, key=lambda x: x["budget"], reverse=True)[:10]
     best_roi = sorted(films_with_roi, key=lambda x: x["roi"], reverse=True)[:10]
 
-    # === CERTIFICATION BREAKDOWN ===
     cert_counts = Counter()
     for tmdb in tmdb_films.values():
         if tmdb.certification:
@@ -635,13 +589,12 @@ def get_insights(db: Session = Depends(get_db)):
         for cert, count in cert_counts.most_common()
     ]
 
-    # === KEYWORDS WITH RATINGS ===
-    keyword_stats = {}  # keyword -> {count, ratings: []}
+    keyword_stats = {}
     for film_id, tmdb in tmdb_films.items():
         if not tmdb.keywords_json:
             continue
         uf = user_films_by_id.get(film_id)
-        for kw in tmdb.keywords_json[:10]:  # Top 10 keywords per film
+        for kw in tmdb.keywords_json[:10]:
             name = kw.get("name") if isinstance(kw, dict) else None
             if not name:
                 continue
@@ -651,7 +604,6 @@ def get_insights(db: Session = Depends(get_db)):
             if uf and uf.rating:
                 keyword_stats[name]["ratings"].append(uf.rating)
 
-    # Calculate avg rating per keyword (min 3 rated films)
     keyword_ratings = []
     for name, stats in keyword_stats.items():
         if len(stats["ratings"]) >= 3:
@@ -663,17 +615,14 @@ def get_insights(db: Session = Depends(get_db)):
                 "avg_rating": avg,
             })
 
-    # Sort by avg rating
     keyword_ratings.sort(key=lambda x: x["avg_rating"], reverse=True)
 
-    # Also keep simple frequency list for display
     top_keywords = [
         {"keyword": kw, "count": count}
         for kw, count in Counter({k: v["count"] for k, v in keyword_stats.items()}).most_common(25)
     ]
 
-    # === RATING TRENDS OVER TIME ===
-    rating_by_year = {}  # year_watched -> {ratings: [], count: 0}
+    rating_by_year = {}
     for uf in user_films:
         if not uf.first_watched or not uf.rating:
             continue
@@ -686,7 +635,7 @@ def get_insights(db: Session = Depends(get_db)):
     rating_trends = []
     for year in sorted(rating_by_year.keys()):
         stats = rating_by_year[year]
-        if stats["count"] >= 5:  # Only years with 5+ rated films
+        if stats["count"] >= 5:
             avg = round(sum(stats["ratings"]) / len(stats["ratings"]), 2)
             rating_trends.append({
                 "year": year,
@@ -694,7 +643,6 @@ def get_insights(db: Session = Depends(get_db)):
                 "count": stats["count"],
             })
 
-    # === DECADE PREFERENCES (by release decade) ===
     rating_by_decade = {}
     for uf in user_films:
         film = films.get(uf.film_id)
@@ -709,7 +657,7 @@ def get_insights(db: Session = Depends(get_db)):
 
     decade_ratings = []
     for label, stats in rating_by_decade.items():
-        if stats["count"] >= 3:  # Only decades with 3+ rated films
+        if stats["count"] >= 3:
             avg = round(sum(stats["ratings"]) / len(stats["ratings"]), 2)
             decade_ratings.append({
                 "decade": label,
@@ -719,7 +667,6 @@ def get_insights(db: Session = Depends(get_db)):
             })
     decade_ratings.sort(key=lambda x: x["sort_key"])
 
-    # === FRANCHISE/COLLECTION TRACKER ===
     collection_stats = {}
     for film_id, tmdb in tmdb_films.items():
         if not tmdb.collection_name:
@@ -748,7 +695,7 @@ def get_insights(db: Session = Depends(get_db)):
 
     collections = []
     for name, stats in collection_stats.items():
-        if stats["count"] >= 2:  # Only collections with 2+ films watched
+        if stats["count"] >= 2:
             avg = round(sum(stats["ratings"]) / len(stats["ratings"]), 2) if stats["ratings"] else None
             collections.append({
                 "name": name,
@@ -799,17 +746,14 @@ def get_tmdb_insights(db: Session = Depends(get_db)):
     """Get insights based on TMDB enrichment data."""
     from sqlalchemy.orm import joinedload
 
-    # Get all watched films with TMDB data
     user_films = db.query(UserFilm).filter(UserFilm.watched == True).all()
     watched_film_ids = {uf.film_id for uf in user_films}
 
     tmdb_films = db.query(TmdbFilm).filter(TmdbFilm.film_id.in_(watched_film_ids)).all()
     films = {f.id: f for f in db.query(Film).filter(Film.id.in_(watched_film_ids)).all()}
 
-    # Build lookup
     tmdb_by_film_id = {t.film_id: t for t in tmdb_films}
 
-    # === Financial Analysis ===
     films_with_budget = []
     films_with_revenue = []
     total_budget_watched = 0
@@ -843,15 +787,12 @@ def get_tmdb_insights(db: Session = Depends(get_db)):
     avg_budget = round(total_budget_watched / len(films_with_budget)) if films_with_budget else 0
     avg_revenue = round(total_revenue_watched / len(films_with_revenue)) if films_with_revenue else 0
 
-    # Top budget films
     top_budget = sorted(films_with_budget, key=lambda x: x["budget"], reverse=True)[:10]
     lowest_budget = sorted([f for f in films_with_budget if f["budget"] > 0], key=lambda x: x["budget"])[:10]
 
-    # Best ROI films
     films_with_roi = [f for f in films_with_revenue if f["roi"] is not None]
     best_roi = sorted(films_with_roi, key=lambda x: x["roi"], reverse=True)[:10]
 
-    # === Certification Breakdown ===
     cert_counter = Counter()
     for tmdb in tmdb_films:
         if tmdb.certification:
@@ -861,7 +802,6 @@ def get_tmdb_insights(db: Session = Depends(get_db)):
         for cert, count in cert_counter.most_common()
     ]
 
-    # === Keywords/Themes Analysis ===
     keyword_counter = Counter()
     for tmdb in tmdb_films:
         if tmdb.keywords_json:
@@ -874,12 +814,10 @@ def get_tmdb_insights(db: Session = Depends(get_db)):
         for kw, count in keyword_counter.most_common(30)
     ]
 
-    # === TMDB vs Letterboxd Ratings ===
     rating_comparison = []
     for tmdb in tmdb_films:
         film = films.get(tmdb.film_id)
         if film and tmdb.vote_average and film.rating:
-            # Convert TMDB (0-10) to same scale as Letterboxd (0-5)
             tmdb_scaled = tmdb.vote_average / 2
             gap = film.rating - tmdb_scaled
             rating_comparison.append({
@@ -892,20 +830,17 @@ def get_tmdb_insights(db: Session = Depends(get_db)):
                 "poster_url": film.poster_url,
             })
 
-    # Films rated higher on Letterboxd vs TMDB
     letterboxd_favorites = sorted(
         [f for f in rating_comparison if f["gap"] > 0.3],
         key=lambda x: x["gap"],
         reverse=True
     )[:10]
 
-    # Films rated higher on TMDB vs Letterboxd
     tmdb_favorites = sorted(
         [f for f in rating_comparison if f["gap"] < -0.3],
         key=lambda x: x["gap"]
     )[:10]
 
-    # === Collection/Franchise Stats ===
     collection_counter = Counter()
     collection_films = {}
     for tmdb in tmdb_films:
@@ -922,7 +857,6 @@ def get_tmdb_insights(db: Session = Depends(get_db)):
         for name, count in collection_counter.most_common(10)
     ]
 
-    # === Streaming Availability (for watchlist) ===
     watchlist_items = db.query(WatchlistItem).all()
     watchlist_film_ids = {w.film_id for w in watchlist_items}
     watchlist_tmdb = db.query(TmdbFilm).filter(TmdbFilm.film_id.in_(watchlist_film_ids)).all()
@@ -997,7 +931,6 @@ def get_films(
         decade: Filter by decade (e.g., '1990s')
         logged_only: If True, only return films with diary entries
     """
-    # Use UserFilm for the complete watched list (datamaxx approach)
     user_films = db.query(UserFilm).filter(UserFilm.watched == True).all()
     films = {f.id: f for f in db.query(Film).all()}
 
@@ -1007,17 +940,14 @@ def get_films(
         if not film:
             continue
 
-        # Filter: logged only
         if logged_only and uf.watch_count == 0:
             continue
 
-        # Filter by genre
         if genre:
             genres = [g.get("name") for g in (film.genres_json or []) if isinstance(g, dict)]
             if genre not in genres:
                 continue
 
-        # Filter by decade
         if decade and film.year:
             film_decade = f"{(film.year // 10) * 10}s"
             if film_decade != decade:
@@ -1033,7 +963,6 @@ def get_films(
             "runtime_minutes": film.runtime_minutes,
             "genres": [g.get("name") for g in (film.genres_json or []) if isinstance(g, dict) and g.get("type") == "genre"],
             "directors": [d.get("name") for d in (film.directors_json or []) if isinstance(d, dict)],
-            # Datamaxx extras
             "watch_count": uf.watch_count or 0,
             "liked": uf.liked,
             "first_watched": uf.first_watched.isoformat() if uf.first_watched else None,
@@ -1041,7 +970,6 @@ def get_films(
             "in_diary": (uf.watch_count or 0) > 0,
         })
 
-    # Sort
     reverse = order == "desc"
     if sort == "title":
         result.sort(key=lambda x: x["title"] or "", reverse=reverse)
@@ -1069,7 +997,6 @@ def get_films_explorer(
 
     Returns paginated results with complete raw data for each film.
     """
-    # Get all data
     user_films = db.query(UserFilm).filter(UserFilm.watched == True).all()
     films = {f.id: f for f in db.query(Film).all()}
     tmdb_data = {t.film_id: t for t in db.query(TmdbFilm).all()}
@@ -1082,7 +1009,6 @@ def get_films_explorer(
 
         tmdb = tmdb_data.get(film.id)
 
-        # Filters
         if search:
             if search.lower() not in (film.title or "").lower():
                 continue
@@ -1101,15 +1027,12 @@ def get_films_explorer(
             if not tmdb.budget or tmdb.budget < min_budget:
                 continue
 
-        # Build complete data object
         film_data = {
             "id": film.id,
             "slug": film.slug,
             "title": film.title,
             "year": film.year,
             "poster_url": film.poster_url,
-
-            # User data
             "user": {
                 "rating": uf.rating,
                 "liked": uf.liked,
@@ -1117,8 +1040,6 @@ def get_films_explorer(
                 "first_watched": uf.first_watched.isoformat() if uf.first_watched else None,
                 "last_watched": uf.last_watched.isoformat() if uf.last_watched else None,
             },
-
-            # Letterboxd data
             "letterboxd": {
                 "rating": film.rating,
                 "rating_count": film.rating_count,
@@ -1136,8 +1057,6 @@ def get_films_explorer(
                 "tmdb_id": film.tmdb_id,
                 "imdb_id": film.imdb_id,
             },
-
-            # TMDB data (if available)
             "tmdb": None,
         }
 
@@ -1180,7 +1099,6 @@ def get_films_explorer(
 
         result.append(film_data)
 
-    # Sort
     reverse = order == "desc"
     if sort == "title":
         result.sort(key=lambda x: x["title"] or "", reverse=reverse)
@@ -1195,7 +1113,6 @@ def get_films_explorer(
     elif sort == "tmdb_rating":
         result.sort(key=lambda x: (x["tmdb"] or {}).get("vote_average") or 0, reverse=reverse)
 
-    # Pagination
     total = len(result)
     start = (page - 1) * per_page
     end = start + per_page
@@ -1217,13 +1134,8 @@ def get_film_detail(film_id: int, db: Session = Depends(get_db)):
     if not film:
         raise HTTPException(status_code=404, detail="Film not found")
 
-    # Get user's relationship with this film
     user_film = db.query(UserFilm).filter(UserFilm.film_id == film_id).first()
-
-    # Get diary entries for this film
     diary_entries = db.query(DiaryEntry).filter(DiaryEntry.film_id == film_id).order_by(DiaryEntry.watched_date.desc()).all()
-
-    # Get TMDB enrichment data
     tmdb_data = db.query(TmdbFilm).filter(TmdbFilm.film_id == film_id).first()
 
     result = {
@@ -1245,14 +1157,12 @@ def get_film_detail(film_id: int, db: Session = Depends(get_db)):
         "studios": film.studios_json or [],
         "tmdb_id": film.tmdb_id,
         "imdb_id": film.imdb_id,
-        # User data
         "user_rating": user_film.rating if user_film else None,
         "liked": user_film.liked if user_film else False,
         "watch_count": user_film.watch_count if user_film else 0,
         "first_watched": user_film.first_watched.isoformat() if user_film and user_film.first_watched else None,
         "last_watched": user_film.last_watched.isoformat() if user_film and user_film.last_watched else None,
         "in_watchlist": db.query(WatchlistItem).filter(WatchlistItem.film_id == film_id).first() is not None,
-        # Diary entries
         "diary_entries": [
             {
                 "id": e.id,
@@ -1265,7 +1175,6 @@ def get_film_detail(film_id: int, db: Session = Depends(get_db)):
         ],
     }
 
-    # Add TMDB data if available
     if tmdb_data:
         result["tmdb"] = {
             "budget": tmdb_data.budget,
@@ -1361,7 +1270,6 @@ def get_watchlist(db: Session = Depends(get_db)):
         if film:
             tmdb = tmdb_data.get(item.film_id)
 
-            # Extract streaming services (US flatrate only)
             streaming = []
             if tmdb and tmdb.watch_providers_json:
                 us_providers = tmdb.watch_providers_json.get("US", {})
@@ -1430,10 +1338,6 @@ def get_calendar(year: Optional[int] = None, db: Session = Depends(get_db)):
 
     return result
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Serve React SPA
-# ─────────────────────────────────────────────────────────────────────────────
 
 @app.get("/{full_path:path}")
 async def serve_spa(full_path: str):

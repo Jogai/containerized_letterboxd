@@ -21,7 +21,6 @@ export default function Profile() {
 
   return (
     <div className="space-y-8">
-      {/* Header */}
       <div className="bg-[#1c2228] rounded-lg p-6">
         <h1 className="text-2xl font-bold text-white">
           {profile.display_name || profile.username}
@@ -49,7 +48,6 @@ export default function Profile() {
         </div>
       </div>
 
-      {/* Stats */}
       {profile.stats && Object.keys(profile.stats).length > 0 && (
         <div>
           <h2 className="text-lg font-semibold text-white mb-4">Letterboxd Stats</h2>
@@ -88,7 +86,6 @@ export default function Profile() {
         </div>
       )}
 
-      {/* Favorites */}
       {profile.favorites && profile.favorites.length > 0 && (
         <div>
           <h2 className="text-lg font-semibold text-white mb-4">Favorite Films</h2>
@@ -105,7 +102,6 @@ export default function Profile() {
         </div>
       )}
 
-      {/* Letterboxd link */}
       <div>
         <a
           href={`https://letterboxd.com/${profile.username}`}

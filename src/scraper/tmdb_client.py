@@ -109,7 +109,6 @@ class TmdbClient:
         """
         logger.info(f"Fetching TMDB movie: {tmdb_id}")
 
-        # Fetch everything in one request using append_to_response
         data = self._request(
             f"/movie/{tmdb_id}",
             params={
@@ -126,7 +125,6 @@ class TmdbClient:
     def _parse_movie_response(self, data: dict, country: str = "US") -> dict:
         """Parse TMDB movie response into our schema."""
 
-        # Extract US certification from release_dates
         certification = None
         certifications_all = {}
         release_dates = data.get("release_dates", {}).get("results", [])
@@ -139,9 +137,8 @@ class TmdbClient:
                     certifications_all[iso] = cert
                     if iso == country:
                         certification = cert
-                    break  # Take first non-empty certification per country
+                    break
 
-        # Extract watch providers for specified country
         watch_providers = data.get("watch/providers", {}).get("results", {})
         watch_providers_parsed = {}
         for iso, providers in watch_providers.items():
@@ -161,16 +158,13 @@ class TmdbClient:
                 ],
             }
 
-        # Extract external IDs
         external_ids = data.get("external_ids", {})
 
-        # Extract keywords
         keywords = [
             {"id": kw.get("id"), "name": kw.get("name")}
             for kw in data.get("keywords", {}).get("keywords", [])
         ]
 
-        # Extract credits
         credits = data.get("credits", {})
         cast = [
             {
@@ -193,7 +187,6 @@ class TmdbClient:
             for c in credits.get("crew", [])
         ]
 
-        # Extract videos (trailers, teasers, etc.)
         videos = [
             {
                 "id": v.get("id"),
@@ -206,7 +199,6 @@ class TmdbClient:
             for v in data.get("videos", {}).get("results", [])
         ]
 
-        # Extract similar and recommendations (just IDs and basic info)
         similar = [
             {"id": m.get("id"), "title": m.get("title"), "poster_path": m.get("poster_path")}
             for m in data.get("similar", {}).get("results", [])
@@ -216,7 +208,6 @@ class TmdbClient:
             for m in data.get("recommendations", {}).get("results", [])
         ]
 
-        # Extract production companies
         production_companies = [
             {
                 "id": c.get("id"),
@@ -227,7 +218,6 @@ class TmdbClient:
             for c in data.get("production_companies", [])
         ]
 
-        # Extract collection info
         collection = data.get("belongs_to_collection")
         collection_id = collection.get("id") if collection else None
         collection_name = collection.get("name") if collection else None
@@ -236,56 +226,44 @@ class TmdbClient:
         return {
             "tmdb_id": data.get("id"),
 
-            # Financial
-            "budget": data.get("budget") or None,  # Convert 0 to None
+            "budget": data.get("budget") or None,
             "revenue": data.get("revenue") or None,
 
-            # Ratings
             "vote_average": data.get("vote_average"),
             "vote_count": data.get("vote_count"),
             "popularity": data.get("popularity"),
 
-            # Classification
             "certification": certification,
             "certifications_json": certifications_all if certifications_all else None,
             "adult": data.get("adult", False),
 
-            # Metadata
             "status": data.get("status"),
             "release_date": data.get("release_date"),
             "homepage": data.get("homepage") or None,
             "origin_country_json": data.get("origin_country") or None,
 
-            # Collection
             "collection_id": collection_id,
             "collection_name": collection_name,
             "collection_poster_path": collection_poster_path,
 
-            # Thematic
             "keywords_json": keywords if keywords else None,
 
-            # Streaming
             "watch_providers_json": watch_providers_parsed if watch_providers_parsed else None,
 
-            # Related
             "similar_json": similar if similar else None,
             "recommendations_json": recommendations if recommendations else None,
 
-            # External IDs
             "imdb_id": external_ids.get("imdb_id"),
             "wikidata_id": external_ids.get("wikidata_id"),
             "facebook_id": external_ids.get("facebook_id"),
             "instagram_id": external_ids.get("instagram_id"),
             "twitter_id": external_ids.get("twitter_id"),
 
-            # Media
             "videos_json": videos if videos else None,
 
-            # Credits
             "cast_json": cast if cast else None,
             "crew_json": crew if crew else None,
 
-            # Production
             "production_companies_json": production_companies if production_companies else None,
         }
 

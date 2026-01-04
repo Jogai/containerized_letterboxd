@@ -22,7 +22,6 @@ def update_film_directors():
     db = SessionLocal()
 
     try:
-        # Get films with empty directors
         films = db.query(Film).filter(
             (Film.directors_json == None) | (Film.directors_json == [])
         ).all()
@@ -32,7 +31,7 @@ def update_film_directors():
         for i, film in enumerate(films):
             try:
                 logger.info(f"[{i+1}/{len(films)}] Fetching directors for: {film.title}")
-                time.sleep(2)  # Rate limit
+                time.sleep(2)
 
                 movie = Movie(film.slug)
                 crew = getattr(movie, "crew", {}) or {}

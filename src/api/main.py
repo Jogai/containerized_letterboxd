@@ -1260,7 +1260,6 @@ def get_film_detail(film_id: int, db: Session = Depends(get_db)):
                 "rating": e.rating,
                 "liked": e.liked,
                 "rewatch": e.rewatch,
-                "review_text": e.review_text,
             }
             for e in diary_entries
         ],
@@ -1336,7 +1335,6 @@ def get_diary(
                 "rating": e.rating,
                 "liked": e.liked,
                 "rewatch": e.rewatch,
-                "review_text": e.review_text,
                 "film": {
                     "id": film.id,
                     "title": film.title,
@@ -1381,37 +1379,6 @@ def get_watchlist(db: Session = Depends(get_db)):
                 "directors": [d.get("name") for d in (film.directors_json or []) if isinstance(d, dict)],
                 "added_date": item.added_date.isoformat() if item.added_date else None,
                 "streaming": streaming,
-            })
-
-    return result
-
-
-@app.get("/api/reviews")
-def get_reviews(db: Session = Depends(get_db)):
-    """Get all diary entries with reviews."""
-    entries = db.query(DiaryEntry).filter(
-        DiaryEntry.review_text.isnot(None),
-        DiaryEntry.review_text != ""
-    ).order_by(DiaryEntry.watched_date.desc()).all()
-
-    films = {f.id: f for f in db.query(Film).all()}
-
-    result = []
-    for e in entries:
-        film = films.get(e.film_id)
-        if film:
-            result.append({
-                "id": e.id,
-                "watched_date": e.watched_date.isoformat() if e.watched_date else None,
-                "rating": e.rating,
-                "liked": e.liked,
-                "review_text": e.review_text,
-                "film": {
-                    "id": film.id,
-                    "title": film.title,
-                    "year": film.year,
-                    "poster_url": film.poster_url,
-                }
             })
 
     return result

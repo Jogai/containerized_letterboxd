@@ -178,7 +178,6 @@ class LetterboxdClient:
                     "rating": rating,
                     "rewatch": actions.get("rewatched", False),
                     "liked": actions.get("liked", False),
-                    "review": None,  # Reviews need separate fetch
                 })
         return entries
 

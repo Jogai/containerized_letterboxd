@@ -217,7 +217,6 @@ class LetterboxdSync:
                 existing.rating = entry_data.get("rating")
                 existing.rewatch = entry_data.get("rewatch", False)
                 existing.liked = entry_data.get("liked", False)
-                existing.review_text = entry_data.get("review")
                 existing.updated_at = datetime.utcnow()
             else:
                 # Create new entry
@@ -236,7 +235,6 @@ class LetterboxdSync:
                     rating=entry_data.get("rating"),
                     rewatch=entry_data.get("rewatch", False),
                     liked=entry_data.get("liked", False),
-                    review_text=entry_data.get("review"),
                 )
                 db.add(entry)
                 count += 1

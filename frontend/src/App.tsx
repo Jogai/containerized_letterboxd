@@ -4,7 +4,6 @@ import Films from './pages/Films';
 import FilmDetail from './pages/FilmDetail';
 import Diary from './pages/Diary';
 import Watchlist from './pages/Watchlist';
-import Reviews from './pages/Reviews';
 import Profile from './pages/Profile';
 import Insights from './pages/Insights';
 import Explorer from './pages/Explorer';
@@ -20,7 +19,6 @@ function App() {
           <Route path="films/:id" element={<FilmDetail />} />
           <Route path="diary" element={<Diary />} />
           <Route path="watchlist" element={<Watchlist />} />
-          <Route path="reviews" element={<Reviews />} />
           <Route path="insights" element={<Insights />} />
           <Route path="explorer" element={<Explorer />} />
           <Route path="profile" element={<Profile />} />

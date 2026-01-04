@@ -47,14 +47,15 @@ def _full_sync_task(username: str, fetch_details: bool = True):
         logger.error(f"[1/2] Letterboxd sync failed: {e}")
         return
 
-    tmdb_key = os.environ.get("TMDB_API_KEY")
+    tmdb_key = os.environ.get("TMDB_ACCESS_TOKEN")
     if not tmdb_key:
-        logger.info("[2/2] TMDB_API_KEY not set, skipping TMDB enrichment")
+        logger.info("[2/2] TMDB_ACCESS_TOKEN not set, skipping TMDB enrichment")
         return
 
+    tmdb_min_delay = float(os.environ.get("TMDB_MIN_DELAY", "0.3"))
     logger.info("[2/2] Starting TMDB enrichment...")
     try:
-        tmdb_stats = run_tmdb_sync()
+        tmdb_stats = run_tmdb_sync(min_delay=tmdb_min_delay)
         logger.info(f"[2/2] TMDB sync completed: {tmdb_stats['films_enriched']} enriched")
     except Exception as e:
         logger.error(f"[2/2] TMDB sync failed: {e}")
@@ -68,7 +69,7 @@ def trigger_sync(
 ):
     """Trigger full sync: Letterboxd first, then TMDB enrichment (runs in background)."""
     background_tasks.add_task(_full_sync_task, username, fetch_details)
-    return {"status": "started", "username": username, "includes_tmdb": bool(os.environ.get("TMDB_API_KEY"))}
+    return {"status": "started", "username": username, "includes_tmdb": bool(os.environ.get("TMDB_ACCESS_TOKEN"))}
 
 
 @app.post("/api/tmdb/sync")

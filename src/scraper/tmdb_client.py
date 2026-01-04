@@ -44,13 +44,13 @@ class TmdbClient:
         Initialize TMDB client.
 
         Args:
-            api_key: TMDB API key. If not provided, reads from TMDB_API_KEY env var.
+            api_key: TMDB access token. If not provided, reads from TMDB_ACCESS_TOKEN env var.
             min_delay: Minimum seconds between requests (default: 0.3)
         """
-        self.api_key = api_key or os.environ.get("TMDB_API_KEY")
+        self.api_key = api_key or os.environ.get("TMDB_ACCESS_TOKEN")
         if not self.api_key:
-            logger.error("TMDB_API_KEY not found in environment variables")
-            raise ValueError("TMDB API key required. Set TMDB_API_KEY env var or pass api_key.")
+            logger.error("TMDB_ACCESS_TOKEN not found in environment variables")
+            raise ValueError("TMDB access token required. Set TMDB_ACCESS_TOKEN env var or pass api_key.")
 
         logger.info("TMDB client initialized")
 
@@ -78,7 +78,7 @@ class TmdbClient:
                 logger.warning(f"TMDB resource not found: {endpoint}")
                 return None
             elif status_code == 401:
-                logger.error(f"TMDB API authentication failed - check your TMDB_API_KEY. Endpoint: {endpoint}")
+                logger.error(f"TMDB API authentication failed - check your TMDB_ACCESS_TOKEN. Endpoint: {endpoint}")
                 logger.error(f"Response: {response_text}")
             elif status_code == 429:
                 logger.error(f"TMDB API rate limit exceeded. Endpoint: {endpoint}")

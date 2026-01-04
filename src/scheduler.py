@@ -5,7 +5,7 @@ Uses APScheduler to run syncs on a cron-like schedule.
 Flow:
 1. Letterboxd sync runs on schedule (fetches films with tmdb_ids)
 2. TMDB sync runs automatically after Letterboxd sync completes
-   - Only if TMDB_API_KEY is configured
+   - Only if TMDB_ACCESS_TOKEN is configured
    - Only enriches films that don't already have TMDB data
 """
 
@@ -22,7 +22,8 @@ logger = logging.getLogger(__name__)
 LETTERBOXD_USERNAME = os.environ.get("LETTERBOXD_USERNAME")
 SYNC_SCHEDULE = os.environ.get("SYNC_SCHEDULE", "0 6 * * *")
 SYNC_MIN_DELAY = float(os.environ.get("SYNC_MIN_DELAY", "4.0"))
-TMDB_API_KEY = os.environ.get("TMDB_API_KEY")
+TMDB_ACCESS_TOKEN = os.environ.get("TMDB_ACCESS_TOKEN")
+TMDB_MIN_DELAY = float(os.environ.get("TMDB_MIN_DELAY", "0.3"))
 
 
 def sync_job():
@@ -39,13 +40,13 @@ def sync_job():
         logger.error(f"[1/2] Letterboxd sync failed: {e}")
         return
 
-    if not TMDB_API_KEY:
-        logger.info("[2/2] TMDB_API_KEY not set, skipping TMDB enrichment")
+    if not TMDB_ACCESS_TOKEN:
+        logger.info("[2/2] TMDB_ACCESS_TOKEN not set, skipping TMDB enrichment")
         return
 
     logger.info("[2/2] Starting TMDB enrichment sync...")
     try:
-        tmdb_stats = run_tmdb_sync()
+        tmdb_stats = run_tmdb_sync(min_delay=TMDB_MIN_DELAY)
         logger.info(f"[2/2] TMDB sync completed: {tmdb_stats['films_enriched']} enriched, {tmdb_stats['films_failed']} failed")
     except Exception as e:
         logger.error(f"[2/2] TMDB sync failed: {e}")

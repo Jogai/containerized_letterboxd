@@ -8,8 +8,9 @@ services:
       - ./data:/app/data
     environment:
       - LETTERBOXD_USERNAME=${LETTERBOXD_USERNAME}
-      - SYNC_SCHEDULE=${SYNC_SCHEDULE:-0 6 * * *}
-      - SYNC_MIN_DELAY=${SYNC_MIN_DELAY:-4.0}
+      - TMDB_ACCESS_TOKEN=${TMDB_ACCESS_TOKEN}
       - DATABASE_PATH=/app/data/letterboxd.db
-      - TMDB_API_KEY=${TMDB_API_KEY}
+      - SYNC_SCHEDULE=0 6 * * *
+      - SYNC_MIN_DELAY=4.0
+      - TMDB_MIN_DELAY=0.3
     restart: unless-stopped

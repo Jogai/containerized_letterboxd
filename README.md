@@ -28,7 +28,7 @@ Data syncs automatically every few hours and is stored locally in SQLite.
 ### Requirements
 
 - Docker and Docker Compose
-- A TMDB API key ([get one here](https://www.themoviedb.org/settings/api))
+- A TMDB Read Access Token ([get one here](https://www.themoviedb.org/settings/api))
 - A public Letterboxd profile
 
 ### Installation
@@ -38,7 +38,7 @@ Data syncs automatically every few hours and is stored locally in SQLite.
 2. Create a `.env` file:
 ```
 LETTERBOXD_USERNAME=your_username
-TMDB_API_KEY=your_api_key
+TMDB_ACCESS_TOKEN=your_read_access_token
 ```
 
 3. Run with Docker Compose:

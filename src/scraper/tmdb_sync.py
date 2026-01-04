@@ -24,7 +24,7 @@ class TmdbSync:
         Initialize TMDB sync.
 
         Args:
-            api_key: TMDB API key (or set TMDB_API_KEY env var)
+            api_key: TMDB access token (or set TMDB_ACCESS_TOKEN env var)
             min_delay: Seconds between API requests (default: 0.3)
         """
         self.client = TmdbClient(api_key=api_key, min_delay=min_delay)

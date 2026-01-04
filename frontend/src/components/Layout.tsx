@@ -27,6 +27,7 @@ export default function Layout() {
             <NavLink to="/watchlist" className={navLinkClass}>Watchlist</NavLink>
             <NavLink to="/reviews" className={navLinkClass}>Reviews</NavLink>
             <NavLink to="/insights" className={navLinkClass}>Insights</NavLink>
+            <NavLink to="/explorer" className={navLinkClass}>Explorer</NavLink>
             <NavLink to="/profile" className={navLinkClass}>Profile</NavLink>
           </nav>
         </div>
@@ -40,7 +41,7 @@ export default function Layout() {
       {/* Footer */}
       <footer className="border-t border-[#2c3440] mt-auto">
         <div className="max-w-7xl mx-auto px-6 py-4 text-center text-sm text-[#99aabb]">
-          Data synced from Letterboxd
+          Data synced from Letterboxd + TMDB
         </div>
       </footer>
     </div>

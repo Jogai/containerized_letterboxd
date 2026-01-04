@@ -23,8 +23,8 @@ def main():
     scheduler.start()
     logger.info("Scheduler started")
 
-    # Run the API server
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Run the API server (log_config=None prevents uvicorn from adding duplicate handlers)
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_config=None)
 
 
 if __name__ == "__main__":

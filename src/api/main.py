@@ -39,15 +39,43 @@ def startup():
 # API Endpoints
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _full_sync_task(username: str, fetch_details: bool = True):
+    """Run Letterboxd sync, then TMDB enrichment."""
+    import logging
+    logger = logging.getLogger(__name__)
+
+    # Step 1: Letterboxd
+    logger.info(f"[1/2] Starting Letterboxd sync for: {username}")
+    try:
+        stats = run_sync(username, fetch_details)
+        logger.info(f"[1/2] Letterboxd sync completed: {stats}")
+    except Exception as e:
+        logger.error(f"[1/2] Letterboxd sync failed: {e}")
+        return
+
+    # Step 2: TMDB (if API key configured)
+    tmdb_key = os.environ.get("TMDB_API_KEY")
+    if not tmdb_key:
+        logger.info("[2/2] TMDB_API_KEY not set, skipping TMDB enrichment")
+        return
+
+    logger.info("[2/2] Starting TMDB enrichment...")
+    try:
+        tmdb_stats = run_tmdb_sync()
+        logger.info(f"[2/2] TMDB sync completed: {tmdb_stats['films_enriched']} enriched")
+    except Exception as e:
+        logger.error(f"[2/2] TMDB sync failed: {e}")
+
+
 @app.post("/api/sync/{username}")
 def trigger_sync(
     username: str,
     background_tasks: BackgroundTasks,
     fetch_details: bool = True
 ):
-    """Trigger a sync for a user (runs in background)."""
-    background_tasks.add_task(run_sync, username, fetch_details)
-    return {"status": "started", "username": username}
+    """Trigger full sync: Letterboxd first, then TMDB enrichment (runs in background)."""
+    background_tasks.add_task(_full_sync_task, username, fetch_details)
+    return {"status": "started", "username": username, "includes_tmdb": bool(os.environ.get("TMDB_API_KEY"))}
 
 
 @app.post("/api/tmdb/sync")
@@ -56,7 +84,9 @@ def trigger_tmdb_sync(
     limit: Optional[int] = None,
     force: bool = False
 ):
-    """Trigger TMDB enrichment sync (runs in background).
+    """Trigger TMDB enrichment sync only (runs in background).
+
+    Note: This is for manual TMDB-only sync. Normally TMDB runs automatically after Letterboxd sync.
 
     Args:
         limit: Max number of films to process (None = all)
@@ -703,6 +733,163 @@ def get_films(
         result.sort(key=lambda x: x["rating"] or 0, reverse=reverse)
 
     return result
+
+
+@app.get("/api/films/explorer")
+def get_films_explorer(
+    search: Optional[str] = None,
+    sort: str = "title",
+    order: str = "asc",
+    page: int = 1,
+    per_page: int = 20,
+    has_tmdb: Optional[bool] = None,
+    certification: Optional[str] = None,
+    min_budget: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    """Get films with full Letterboxd + TMDB data for exploration.
+
+    Returns paginated results with complete raw data for each film.
+    """
+    # Get all data
+    user_films = db.query(UserFilm).filter(UserFilm.watched == True).all()
+    films = {f.id: f for f in db.query(Film).all()}
+    tmdb_data = {t.film_id: t for t in db.query(TmdbFilm).all()}
+
+    result = []
+    for uf in user_films:
+        film = films.get(uf.film_id)
+        if not film:
+            continue
+
+        tmdb = tmdb_data.get(film.id)
+
+        # Filters
+        if search:
+            if search.lower() not in (film.title or "").lower():
+                continue
+
+        if has_tmdb is not None:
+            if has_tmdb and not tmdb:
+                continue
+            if not has_tmdb and tmdb:
+                continue
+
+        if certification and tmdb:
+            if tmdb.certification != certification:
+                continue
+
+        if min_budget and tmdb:
+            if not tmdb.budget or tmdb.budget < min_budget:
+                continue
+
+        # Build complete data object
+        film_data = {
+            "id": film.id,
+            "slug": film.slug,
+            "title": film.title,
+            "year": film.year,
+            "poster_url": film.poster_url,
+
+            # User data
+            "user": {
+                "rating": uf.rating,
+                "liked": uf.liked,
+                "watch_count": uf.watch_count or 0,
+                "first_watched": uf.first_watched.isoformat() if uf.first_watched else None,
+                "last_watched": uf.last_watched.isoformat() if uf.last_watched else None,
+            },
+
+            # Letterboxd data
+            "letterboxd": {
+                "rating": film.rating,
+                "rating_count": film.rating_count,
+                "runtime_minutes": film.runtime_minutes,
+                "tagline": film.tagline,
+                "description": film.description,
+                "genres": film.genres_json,
+                "directors": film.directors_json,
+                "cast": film.cast_json,
+                "crew": film.crew_json,
+                "countries": film.countries_json,
+                "languages": film.languages_json,
+                "studios": film.studios_json,
+                "url": film.letterboxd_url,
+                "tmdb_id": film.tmdb_id,
+                "imdb_id": film.imdb_id,
+            },
+
+            # TMDB data (if available)
+            "tmdb": None,
+        }
+
+        if tmdb:
+            film_data["tmdb"] = {
+                "budget": tmdb.budget,
+                "revenue": tmdb.revenue,
+                "vote_average": tmdb.vote_average,
+                "vote_count": tmdb.vote_count,
+                "popularity": tmdb.popularity,
+                "certification": tmdb.certification,
+                "certifications": tmdb.certifications_json,
+                "adult": tmdb.adult,
+                "status": tmdb.status,
+                "release_date": tmdb.release_date,
+                "homepage": tmdb.homepage,
+                "origin_country": tmdb.origin_country_json,
+                "collection": {
+                    "id": tmdb.collection_id,
+                    "name": tmdb.collection_name,
+                    "poster_path": tmdb.collection_poster_path,
+                } if tmdb.collection_id else None,
+                "keywords": tmdb.keywords_json,
+                "watch_providers": tmdb.watch_providers_json,
+                "similar": tmdb.similar_json,
+                "recommendations": tmdb.recommendations_json,
+                "videos": tmdb.videos_json,
+                "cast": tmdb.cast_json,
+                "crew": tmdb.crew_json,
+                "production_companies": tmdb.production_companies_json,
+                "external_ids": {
+                    "imdb": tmdb.imdb_id,
+                    "wikidata": tmdb.wikidata_id,
+                    "facebook": tmdb.facebook_id,
+                    "instagram": tmdb.instagram_id,
+                    "twitter": tmdb.twitter_id,
+                },
+                "last_synced": tmdb.last_synced_at.isoformat() if tmdb.last_synced_at else None,
+            }
+
+        result.append(film_data)
+
+    # Sort
+    reverse = order == "desc"
+    if sort == "title":
+        result.sort(key=lambda x: x["title"] or "", reverse=reverse)
+    elif sort == "year":
+        result.sort(key=lambda x: x["year"] or 0, reverse=reverse)
+    elif sort == "rating":
+        result.sort(key=lambda x: x["user"]["rating"] or 0, reverse=reverse)
+    elif sort == "budget":
+        result.sort(key=lambda x: (x["tmdb"] or {}).get("budget") or 0, reverse=reverse)
+    elif sort == "revenue":
+        result.sort(key=lambda x: (x["tmdb"] or {}).get("revenue") or 0, reverse=reverse)
+    elif sort == "tmdb_rating":
+        result.sort(key=lambda x: (x["tmdb"] or {}).get("vote_average") or 0, reverse=reverse)
+
+    # Pagination
+    total = len(result)
+    start = (page - 1) * per_page
+    end = start + per_page
+    paginated = result[start:end]
+
+    return {
+        "count": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": (total + per_page - 1) // per_page,
+        "films": paginated,
+    }
 
 
 @app.get("/api/films/{film_id}")

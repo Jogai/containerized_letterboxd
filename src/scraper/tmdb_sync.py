@@ -120,23 +120,25 @@ class TmdbSync:
             "enriched", "skipped", or "failed"
         """
         if not film.tmdb_id:
+            logger.debug(f"Skipping {film.slug}: no tmdb_id")
             return "skipped"
 
         # Check if already enriched
         existing = db.query(TmdbFilm).filter(TmdbFilm.film_id == film.id).first()
         if existing and not force:
+            logger.debug(f"Skipping {film.slug}: already enriched")
             return "skipped"
 
         try:
             tmdb_id = int(film.tmdb_id)
         except (ValueError, TypeError):
-            logger.warning(f"Invalid tmdb_id for film {film.slug}: {film.tmdb_id}")
+            logger.error(f"Invalid tmdb_id for film {film.slug}: {film.tmdb_id}")
             return "failed"
 
         try:
             data = self.client.get_movie(tmdb_id)
         except Exception as e:
-            logger.warning(f"Failed to fetch TMDB data for {film.slug} (tmdb_id={tmdb_id}): {e}")
+            logger.error(f"Failed to fetch TMDB data for {film.slug} (tmdb_id={tmdb_id}): {type(e).__name__}: {e}")
             return "failed"
 
         if not data:
@@ -185,10 +187,11 @@ class TmdbSync:
             tmdb_film.last_synced_at = datetime.utcnow()
             tmdb_film.updated_at = datetime.utcnow()
 
+            logger.debug(f"Enriched {film.slug} (tmdb_id={tmdb_id})")
             return "enriched"
 
         except Exception as e:
-            logger.error(f"Failed to save TMDB data for {film.slug}: {e}")
+            logger.error(f"Failed to save TMDB data for {film.slug}: {type(e).__name__}: {e}")
             return "failed"
 
     def enrich_single(self, db: Session, film_id: int, force: bool = False) -> dict:

@@ -7,6 +7,7 @@ import Watchlist from './pages/Watchlist';
 import Reviews from './pages/Reviews';
 import Profile from './pages/Profile';
 import Insights from './pages/Insights';
+import Explorer from './pages/Explorer';
 import Layout from './components/Layout';
 
 function App() {
@@ -21,6 +22,7 @@ function App() {
           <Route path="watchlist" element={<Watchlist />} />
           <Route path="reviews" element={<Reviews />} />
           <Route path="insights" element={<Insights />} />
+          <Route path="explorer" element={<Explorer />} />
           <Route path="profile" element={<Profile />} />
         </Route>
       </Routes>

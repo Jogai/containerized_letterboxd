@@ -49,7 +49,10 @@ class TmdbClient:
         """
         self.api_key = api_key or os.environ.get("TMDB_API_KEY")
         if not self.api_key:
+            logger.error("TMDB_API_KEY not found in environment variables")
             raise ValueError("TMDB API key required. Set TMDB_API_KEY env var or pass api_key.")
+
+        logger.info("TMDB client initialized")
 
         self.rate_limiter = TmdbRateLimiter(min_delay=min_delay)
         self.session = requests.Session()
@@ -64,17 +67,33 @@ class TmdbClient:
 
         url = f"{TMDB_API_BASE}{endpoint}"
         try:
+            logger.debug(f"TMDB request: {endpoint}")
             response = self.session.get(url, params=params, timeout=30)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 404:
+            status_code = e.response.status_code if e.response else "unknown"
+            response_text = e.response.text[:500] if e.response else "no response"
+            if status_code == 404:
                 logger.warning(f"TMDB resource not found: {endpoint}")
                 return None
-            logger.error(f"TMDB API error: {e}")
+            elif status_code == 401:
+                logger.error(f"TMDB API authentication failed - check your TMDB_API_KEY. Endpoint: {endpoint}")
+                logger.error(f"Response: {response_text}")
+            elif status_code == 429:
+                logger.error(f"TMDB API rate limit exceeded. Endpoint: {endpoint}")
+            else:
+                logger.error(f"TMDB API HTTP error {status_code}: {endpoint}")
+                logger.error(f"Response: {response_text}")
+            raise
+        except requests.exceptions.Timeout as e:
+            logger.error(f"TMDB request timeout: {endpoint}")
+            raise
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"TMDB connection error: {endpoint} - {e}")
             raise
         except requests.exceptions.RequestException as e:
-            logger.error(f"TMDB request failed: {e}")
+            logger.error(f"TMDB request failed: {endpoint} - {type(e).__name__}: {e}")
             raise
 
     def get_movie(self, tmdb_id: int, country: str = "US") -> Optional[dict]:
@@ -273,8 +292,14 @@ class TmdbClient:
     def test_connection(self) -> bool:
         """Test API connection by fetching configuration."""
         try:
+            logger.info("Testing TMDB API connection...")
             data = self._request("/configuration")
-            return data is not None
+            if data:
+                logger.info("TMDB API connection successful")
+                return True
+            else:
+                logger.error("TMDB API connection failed - no data returned")
+                return False
         except Exception as e:
-            logger.error(f"TMDB connection test failed: {e}")
+            logger.error(f"TMDB connection test failed: {type(e).__name__}: {e}")
             return False

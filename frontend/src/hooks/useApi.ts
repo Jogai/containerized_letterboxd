@@ -145,3 +145,21 @@ export function useInsights() {
 
   return { data, loading };
 }
+
+export function useExplorer(sort: string = 'title', order: string = 'asc', search: string = '', page: number = 1, perPage: number = 20) {
+  const [data, setData] = useState<{ count: number; page: number; per_page: number; total_pages: number; films: any[] } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    const params = new URLSearchParams({ sort, order, page: page.toString(), per_page: perPage.toString() });
+    if (search) params.append('search', search);
+
+    fetch(`${API_BASE}/films/explorer?${params.toString()}`)
+      .then(res => res.json())
+      .then(setData)
+      .finally(() => setLoading(false));
+  }, [sort, order, search, page, perPage]);
+
+  return { data, loading };
+}

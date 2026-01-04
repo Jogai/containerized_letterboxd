@@ -59,6 +59,9 @@ export default function Profile() {
             <p className="text-[#99aabb] text-sm mt-1">
               Fetches your latest films, ratings, and diary entries from Letterboxd, then enriches with TMDB data.
             </p>
+            <p className="text-[#667788] text-xs mt-1">
+              Syncs automatically once per day. Initial sync may take a few minutes depending on your library size. Sync can safely resume if interrupted.
+            </p>
           </div>
           <button
             onClick={handleSync}
@@ -82,12 +85,15 @@ export default function Profile() {
             )}
           </button>
         </div>
-        <div className="flex items-center gap-4 text-sm">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
           {syncStatus?.last_sync && (
             <span className="text-[#99aabb]">
               Last synced: {new Date(syncStatus.last_sync).toLocaleString()}
               {syncStatus.last_sync_items !== null && ` (${syncStatus.last_sync_items} items)`}
             </span>
+          )}
+          {!syncStatus?.last_sync && !syncing && (
+            <span className="text-[#667788]">No sync yet — click Sync Now to get started</span>
           )}
           {syncMessage && (
             <span className={syncMessage.includes('Failed') ? 'text-red-400' : 'text-[#00e054]'}>

@@ -1316,7 +1316,18 @@ def get_profile(db: Session = Depends(get_db)):
     """Get user profile."""
     user = db.query(User).first()
     if not user:
-        raise HTTPException(status_code=404, detail="No user found")
+        username = os.environ.get("LETTERBOXD_USERNAME")
+        if not username:
+            raise HTTPException(status_code=404, detail="No user found")
+        return {
+            "username": username,
+            "display_name": None,
+            "bio": None,
+            "location": None,
+            "website": None,
+            "favorites": [],
+            "stats": {},
+        }
 
     return {
         "username": user.username,

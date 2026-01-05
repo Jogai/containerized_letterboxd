@@ -338,18 +338,26 @@ export default function Insights() {
         <Card className="bg-white border-cream-200 ring-0 shadow-sm">
           <Title className="text-[var(--text-primary)]">Your Genre Preferences</Title>
           <Text className="text-[var(--text-muted)]">Average rating by genre (min 5 films)</Text>
-          <BarChart
-            className="mt-6 h-72"
-            data={genreChartData}
-            index="name"
-            categories={['Avg Rating']}
-            colors={['blue']}
-            showLegend={false}
-            showGridLines={false}
-            yAxisWidth={48}
-            layout="vertical"
-            valueFormatter={(v) => v.toFixed(2)}
-          />
+          <div className="mt-6 space-y-4">
+            {genreChartData.map((genre: any) => (
+              <div key={genre.name}>
+                <Flex className="mb-1">
+                  <Text className="text-[var(--text-body)] text-sm" title={genre.name}>
+                    {genre.name}
+                  </Text>
+                  <Text className="text-ink font-mono font-medium text-sm ml-2 flex-shrink-0">
+                    ★ {genre['Avg Rating'].toFixed(2)}
+                  </Text>
+                </Flex>
+                <ProgressBar
+                  value={(genre['Avg Rating'] / 5) * 100}
+                  color="blue"
+                  className="h-2"
+                />
+                <Text className="text-[var(--text-muted)] text-xs mt-0.5">{genre.Films} films</Text>
+              </div>
+            ))}
+          </div>
         </Card>
       )}
 
@@ -358,18 +366,25 @@ export default function Insights() {
           <Card className="bg-white border-cream-200 ring-0 shadow-sm">
             <Title className="text-[var(--text-primary)]">Directors You Rate Highest</Title>
             <Text className="text-[var(--text-muted)]">Average rating (2+ films)</Text>
-            <BarChart
-              className="mt-4 h-64"
-              data={directorChartData}
-              index="name"
-              categories={['Avg Rating']}
-              colors={['rose']}
-              showLegend={false}
-              showGridLines={false}
-              yAxisWidth={48}
-              layout="vertical"
-              valueFormatter={(v) => v.toFixed(2)}
-            />
+            <div className="mt-4 space-y-3">
+              {directorChartData.map((director: any) => (
+                <div key={director.name}>
+                  <Flex className="mb-1">
+                    <Text className="text-[var(--text-body)] text-sm truncate" title={director.name}>
+                      {director.name}
+                    </Text>
+                    <Text className="text-rust font-mono font-medium text-sm ml-2 flex-shrink-0">
+                      ★ {director['Avg Rating'].toFixed(2)}
+                    </Text>
+                  </Flex>
+                  <ProgressBar
+                    value={(director['Avg Rating'] / 5) * 100}
+                    color="rose"
+                    className="h-2"
+                  />
+                </div>
+              ))}
+            </div>
           </Card>
         )}
 
@@ -377,18 +392,25 @@ export default function Insights() {
           <Card className="bg-white border-cream-200 ring-0 shadow-sm">
             <Title className="text-[var(--text-primary)]">Actors You Rate Highest</Title>
             <Text className="text-[var(--text-muted)]">Average rating (3+ films)</Text>
-            <BarChart
-              className="mt-4 h-64"
-              data={actorChartData}
-              index="name"
-              categories={['Avg Rating']}
-              colors={['fuchsia']}
-              showLegend={false}
-              showGridLines={false}
-              yAxisWidth={48}
-              layout="vertical"
-              valueFormatter={(v) => v.toFixed(2)}
-            />
+            <div className="mt-4 space-y-3">
+              {actorChartData.map((actor: any) => (
+                <div key={actor.name}>
+                  <Flex className="mb-1">
+                    <Text className="text-[var(--text-body)] text-sm truncate" title={actor.name}>
+                      {actor.name}
+                    </Text>
+                    <Text className="text-sage font-mono font-medium text-sm ml-2 flex-shrink-0">
+                      ★ {actor['Avg Rating'].toFixed(2)}
+                    </Text>
+                  </Flex>
+                  <ProgressBar
+                    value={(actor['Avg Rating'] / 5) * 100}
+                    color="emerald"
+                    className="h-2"
+                  />
+                </div>
+              ))}
+            </div>
           </Card>
         )}
       </Grid>

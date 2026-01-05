@@ -309,7 +309,7 @@ class LetterboxdSync:
     ) -> Optional[Film]:
         """Get existing film or create new one, retry if previous fetch failed."""
         film = db.query(Film).filter(Film.slug == slug).first()
-        needs_details = film is None or film.title == film.slug
+        needs_details = film is None or film.year is None
 
         if film and not needs_details:
             return film

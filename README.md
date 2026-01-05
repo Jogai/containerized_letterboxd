@@ -1,12 +1,14 @@
 # Your Letterboxd
 
-A self-hosted Letterboxd tracking dashboard.
+A self-hosted Letterboxd analytics and tracking dashboard.
 
 Inspired by [Your Spotify](https://github.com/Yooooomi/your_spotify), but for movies. It syncs your Letterboxd data and enriches it with metadata from TMDB to give you insights into your watching habits.
 
-Your data is stored locally in a single SQLite database that you own. The app runs in a container and automatically syncs new activity on a schedule, so your watch history builds up over time.
+Your data is stored locally in a single SQLite database that you own. The app runs in a container and automatically syncs new activity on a schedule, so your watch history builds up over time without requiring manual sync.
 
 ![Demo](demo.gif)
+
+[View screenshots individually](https://chyuang.com/projects/your-letterboxd/)
 
 ## Features
 

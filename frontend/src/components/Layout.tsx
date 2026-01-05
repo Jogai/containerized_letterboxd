@@ -11,9 +11,7 @@ export default function Layout() {
       <header className="bg-white border-b border-cream-200 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-8 py-5 flex items-center justify-between">
           <NavLink to="/" className="flex items-center gap-3 group">
-            <div className="w-9 h-9 rounded-full bg-sage flex items-center justify-center shadow-sm">
-              <span className="text-lg font-display font-semibold text-white">Y</span>
-            </div>
+            <img src="/logo.svg" alt="Your Letterboxd" className="w-9 h-9" />
             <div>
               <h1 className="text-lg font-display font-semibold text-[var(--text-primary)] group-hover:text-rust transition-colors">
                 Your Letterboxd

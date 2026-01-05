@@ -28,6 +28,14 @@ STATIC_DIR = Path("/app/static")
 if STATIC_DIR.exists():
     app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
 
+@app.get("/logo.svg")
+async def serve_logo():
+    """Serve the logo SVG."""
+    logo_path = STATIC_DIR / "logo.svg"
+    if logo_path.exists():
+        return FileResponse(logo_path, media_type="image/svg+xml")
+    raise HTTPException(status_code=404, detail="Logo not found")
+
 
 @app.on_event("startup")
 def startup():
